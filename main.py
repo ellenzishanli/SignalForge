@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Frontier Tech Radar
+SignalForge
 Modes:
-  full     — stocks (all sectors + gems + ETF) + tech briefing
+  full     — whales + stocks (all sectors + gems + ETF) + tech briefing
   stocks   — sector scan + hidden gems + ETF (no tech news)
   briefing — tech news only (no stocks)
   gems     — hidden gems only (fastest)
+  whales   — smart money tracker only (6 tabs)
 """
 import os, sys
 from datetime import datetime
@@ -19,6 +20,7 @@ from rich.rule import Rule
 load_dotenv()
 sys.path.insert(0, os.path.dirname(__file__))
 
+from whales.whale_display import run_whale_tracker
 from scrapers.github_trending import fetch_github_trending
 from scrapers.producthunt import fetch_producthunt_top
 from scrapers.feeds import fetch_feeds
@@ -82,8 +84,19 @@ def run_stocks(briefing_mode: bool = False):
     return sector_results, etf_stocks, gems, analysis
 
 
+def run_whales_only():
+    """Whale tracker only — 6 tabs of smart money intelligence."""
+    console.print(Rule(f"[bold yellow]🐋 Smart Money Tracker — {TODAY}[/bold yellow]"))
+    run_whale_tracker()
+
+
 def run_tech_radar():
-    """Full run: stocks first, then tech briefing."""
+    """Full run: whales FIRST, then stocks, then tech briefing."""
+    # ── 0. Whale Tracker (shown first) ────────────────────────────────────────
+    console.print(Rule(f"[bold yellow]🐋 Part 0: Smart Money / Whale Tracker[/bold yellow]"))
+    run_whale_tracker()
+    console.print()
+
     sector_results, etf_stocks, gems, stock_analysis = run_stocks(briefing_mode=False)
 
     console.print()
@@ -150,14 +163,15 @@ def run_briefing_only():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Frontier Tech Radar")
-    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems"], default="full")
+    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems", "whales"], default="full")
     args = parser.parse_args()
 
     provider = get_provider()
     if provider == "groq" and not os.getenv("GROQ_API_KEY"):
         console.print("[red]Error: Set GROQ_API_KEY in .env[/red]"); sys.exit(1)
 
-    if args.mode == "full":      run_tech_radar()
-    elif args.mode == "stocks":  run_stocks()
+    if args.mode == "full":       run_tech_radar()
+    elif args.mode == "stocks":   run_stocks()
     elif args.mode == "briefing": run_briefing_only()
-    elif args.mode == "gems":    run_gems_only()
+    elif args.mode == "gems":     run_gems_only()
+    elif args.mode == "whales":   run_whales_only()
