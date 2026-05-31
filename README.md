@@ -1,12 +1,59 @@
 # SignalForge 🔭
 
-**AI-powered quantitative investment research platform** — daily tech intelligence + multi-factor stock analysis across all market sectors.
+**AI-powered quantitative investment research platform** — smart money tracking + daily tech intelligence + multi-factor stock analysis across all market sectors.
 
 Built for investors, finance professionals, and quant enthusiasts who want institutional-quality signals without a Bloomberg terminal.
 
 ---
 
 ## What It Does
+
+### 🐋 Whale Tracker — Smart Money Intelligence (`--mode whales`)
+
+Track what the world's best investors are actually buying — pulled directly from SEC filings, congressional disclosures, insider reports, and social signals.
+
+**7 tabs of intelligence:**
+
+| Tab | Source | What you get |
+|-----|--------|-------------|
+| **1–2: Institutional + AI Funds** | SEC 13F filings | Top positions from 16 managers including Ackman, Druckenmiller, Leopold Aschenbrenner, D1 Capital, Whale Rock |
+| **3: Asia Whales** | SEC 13F | Hillhouse Capital, DST Global, SoftBank, GIC Singapore US holdings |
+| **4: Crypto Whales** | Public disclosures | Saylor/MSTR, a16z, World Liberty Financial, Pantera, Galaxy Digital |
+| **5: Insider Buying** | Finviz | C-suite and director purchases — when executives buy their own stock |
+| **6: Congressional Trades** | QuiverQuant API | Real-time STOCK Act disclosures with verified tickers |
+| **7: Social Intelligence** | StockTwits + Finviz News + SEC RSS | Trending tickers, social sentiment on whale holdings, whale name mentions in headlines, new 13F filing alerts |
+
+**Funds tracked (13F + public disclosures):**
+
+| Manager | Fund | Style |
+|---------|------|-------|
+| Warren Buffett | Berkshire Hathaway | Value / Long-only |
+| Bill Ackman | Pershing Square | Activist / Concentrated |
+| Stanley Druckenmiller | Duquesne Family Office | Global Macro |
+| Michael Burry | Scion Asset Mgmt | Contrarian / Short |
+| Leopold Aschenbrenner | Situational Awareness LP | AI Infrastructure thesis |
+| Dan Sundheim | D1 Capital Partners | Concentrated Growth |
+| Scott Ferguson | Sachem Head Capital | Activist (Ackman protégé) |
+| Henry Ellenbogen | Durable Capital Partners | Long-term Growth |
+| Alex Sacerdote | Whale Rock Capital | Tech L/S |
+| Andreas Halvorsen | Viking Global | Tiger Cub / L/S |
+| Dan Loeb | Third Point LLC | Activist / Tech |
+| Seth Klarman | Baupost Group | Deep Value |
+| Philippe Laffont | Coatue Management | Tech L/S |
+| Chase Coleman | Tiger Global | Growth / Global Tech |
+| Cathie Wood | ARK Investment Mgmt | Disruptive Innovation |
+| + Congressional insiders | QuiverQuant | STOCK Act disclosures |
+
+**Recommendation engine:**
+- Each position scored on **novelty** — mega-caps (AAPL/MSFT/NVDA) are down-ranked, picks from less-followed managers (Scion, Situational Awareness, D1, Whale Rock) are boosted
+- Every ticker enriched with quant score (0–100), technical + statistical sub-scores, and a follow signal: `⭐⭐⭐ STRONG FOLLOW` → `❌ AVOID`
+- Final summary table shows `💡 non-obvious` vs `👥 consensus` for each pick
+
+```bash
+python3 main.py --mode whales 2>/dev/null | less -R
+```
+
+---
 
 ### 📈 Stock Analysis (Quant Engine)
 - **5-module scoring system** (each 0–100): Technical · Statistical · ML Trend · Risk · Fundamental
@@ -55,7 +102,10 @@ cp .env.example .env
 
 ### 4. Run
 ```bash
-# Full run: sector scan + hidden gems + ETF + tech briefing
+# Whale tracker — smart money intelligence (7 tabs)
+python3 main.py --mode whales 2>/dev/null | less -R
+
+# Full run: whales + sector scan + hidden gems + ETF + tech briefing
 python3 main.py --mode full
 
 # Stock analysis only (all sectors + ETF + hidden gems)
@@ -105,6 +155,12 @@ signalforge/
 │   ├── hidden_gems.py          # Small/mid-cap experimental picks
 │   ├── screener.py             # Discount buy signals + GARP value picks
 │   └── data_enrichment.py      # Finviz scraper (short interest, analyst ratings)
+├── whales/
+│   ├── whale_display.py        # Main whale tracker (7 tabs, quant enrichment, novelty ranking)
+│   ├── sec_13f.py              # SEC EDGAR 13F parser (submissions → XML → holdings)
+│   └── social_signals.py       # QuiverQuant, Finviz Insider, StockTwits, news scanner
+├── config/
+│   └── whales.py               # Fund registry: 16 managers with CIKs, styles, known-for
 ├── scrapers/
 │   ├── github_trending.py      # GitHub Trending
 │   ├── feeds.py                # TechCrunch, VentureBeat, arXiv RSS
