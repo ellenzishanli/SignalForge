@@ -111,6 +111,25 @@ def _get_quant_for_ticker(ticker: str) -> Dict:
         return default
 
 
+_COMPANY_NAME_CACHE: Dict[str, str] = {}
+
+def _company_name(ticker: str) -> str:
+    """Return human-readable company name for a ticker (cached)."""
+    if not ticker or len(ticker) > 5:
+        return ticker
+    if ticker in _COMPANY_NAME_CACHE:
+        return _COMPANY_NAME_CACHE[ticker]
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker).info
+        name = info.get("shortName") or info.get("longName") or ticker
+        _COMPANY_NAME_CACHE[ticker] = name[:28]
+        return name[:28]
+    except Exception:
+        _COMPANY_NAME_CACHE[ticker] = ticker
+        return ticker
+
+
 def enrich_with_quant(trades: List[WhaleTrade]) -> List[WhaleTrade]:
     """Add quant scores to trades. Caches by ticker to avoid re-fetching."""
     cache: Dict[str, Dict] = {}
@@ -481,6 +500,7 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
         ("Point72 Asset Mgmt",    "0001603466"),
         ("D. E. Shaw & Co.",      "0001009207"),
         ("Two Sigma Advisers",    "0001478735"),
+        ("WorldQuant Millennium", "0001745981"),
     ]
 
     tab12: List[WhaleTrade] = []
@@ -505,29 +525,7 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
         out.print(render_trades_table(tab12_deduped, "🏦 Institutional + AI Funds — Top Positions with Quant Signal"))
         out.print()
 
-    # ── Tab 3: Asia Whales ────────────────────────────────────────────────────
-    out.rule("[cyan]Tab 3: Asia Whales[/cyan]")
-    out.print("  [dim]→ Hillhouse stopped US 13F filings in 2021. Trying historical filings...[/dim]")
-    asia: List[WhaleTrade] = []
-    for name, cik in [("Hillhouse Capital","0001762304"),("DST Global","0001548144"),
-                      ("SoftBank Vision Fund","0001640251"),("GIC Singapore","0001641614")]:
-        out.print(f"  [dim]→ {name}...[/dim]")
-        trades = get_13f_trades(name, cik)
-        if trades:
-            asia.extend(trades)
-        else:
-            out.print(f"  [dim yellow]  ↳ No active 13F for {name} (foreign sovereign/private fund)[/dim yellow]")
-        time.sleep(0.2)
-    if asia:
-        asia = enrich_with_quant(asia)
-        all_trades.extend(asia)
-        out.print(render_trades_table(list(deduplicate(asia))[:10], "🐉 Asia Whales — US Holdings (13F)"))
-    else:
-        out.print("  [yellow]Asia whales (Hillhouse/SoftBank/GIC) do not file US 13F or filings are historical only.[/yellow]")
-        out.print("  [dim]→ Track via: Bloomberg/Reuters news, SoftBank quarterly reports, GIC annual report.[/dim]")
-    out.print()
-
-    # ── Tab 4: Crypto Whales ──────────────────────────────────────────────────
+    # ── Tab 3: Crypto Whales ─────────────────────────────────────────────────
     out.rule("[cyan]Tab 4: Crypto Whales[/cyan]")
     crypto: List[WhaleTrade] = [
         WhaleTrade("Michael Saylor/MSTR",          "MSTR", "MicroStrategy",    "BUY",       2000, "Recent", "Public Disclosure"),
@@ -550,7 +548,7 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
         ticker = row["ticker"]
         insider.append(WhaleTrade(
             whale=f"Insider: {row['insider']} ({row['role'][:12]})",
-            ticker=ticker, company=ticker,
+            ticker=ticker, company=_company_name(ticker),
             action="BUY (Insider)", value_usd_m=0,
             date=row["date"], source="Finviz Insider",
         ))
@@ -571,7 +569,7 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
     for row in congress_raw:
         political.append(WhaleTrade(
             whale=row["politician"], ticker=row["ticker"],
-            company=row["ticker"], action=row["action"],
+            company=_company_name(row["ticker"]), action=row["action"],
             value_usd_m=0, date=row["filed_date"], source="QuiverQuant",
         ))
     if political:

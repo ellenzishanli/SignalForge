@@ -136,33 +136,95 @@ def _try_xml_names(cik_int: str, accession: str) -> Optional[str]:
 # ── Step 3: Parse XML holdings ────────────────────────────────────────────────
 
 CUSIP_TICKER = {
+    # Mega-cap tech
     "037833100":"AAPL","023135106":"AMZN","02079K305":"GOOGL","594918104":"MSFT",
     "67066G104":"NVDA","88160R101":"TSLA","30303M102":"META","46090E103":"SPOT",
-    "079679102":"AMD", "45866F104":"INTC","126650100":"CVX", "172967424":"C",
-    "38141G104":"GS",  "46625H100":"JPM", "172967101":"BAC","025816109":"AXP",
-    "097023105":"BRK", "38259P508":"GOOG","693475105":"OXY","084670702":"BRK.B",
-    "191241100":"KO",  "235851102":"CVS", "345370860":"WFC","92826C839":"V",
-    "00206R102":"T",   "020002101":"MCD", "742718109":"PG", "857477103":"SBUX",
-    "881624209":"TGT", "91324P102":"UNH", "531229102":"LLY","422806109":"HD",
-    "26875P101":"EOG", "26614N102":"DUK", "67011P100":"NOC","526057104":"LMT",
-    "375558103":"GILD","458140100":"INTC","56585A102":"MA", "713448108":"PFE",
-    # Berkshire common holdings
-    "693475105":"OXY", "084670702":"BRK.B","191241100":"KO", "060505104":"BAC",
-    "166764100":"CVX", "717081103":"PFE",  "88160R101":"TSLA","806857108":"SHW",
-    "08180D106":"BYD", "38141G104":"GS",   "46625H100":"JPM", "247361702":"KHC",
-    "756109104":"RAL", "G7690C108":"STNE", "92826C839":"V",   "92826C839":"VISA",
-    "00287Y109":"ABBV","256135203":"DVA",  "369604103":"GEN",  "882508104":"TRV",
-    "30231G102":"XOM", "30303M102":"META", "023135106":"AMZN","023135106":"AMZN",
+    "38259P508":"GOOG","079679102":"AMD","45866F104":"INTC","56585A102":"MA",
+    "92826C839":"V","74144T108":"PYPL","17275R102":"CSCO","11135F101":"BKNG",
+    "84265V105":"SHOP","09857L108":"UBER","20030N101":"COIN","14040H105":"CRWD",
+    "67066G104":"NVDA","89832Q109":"TTD","09243R106":"BILL",
+    # Finance
+    "46625H100":"JPM","172967101":"BAC","38141G104":"GS","172967424":"C",
+    "025816109":"AXP","345370860":"WFC","693475105":"OXY","00206R102":"T",
+    "60934N104":"MS",  "06738G103":"BX", "18673P208":"BLK","26884L109":"ARES",
+    "23804L103":"DFS", "29379V103":"EQT","48128B104":"KKR",
+    # Healthcare / pharma
+    "531229102":"LLY","91324P102":"UNH","713448108":"PFE","375558103":"GILD",
+    "584934BX":"MRK", "00287Y109":"ABBV","256135203":"DVA","071734107":"BIIB",
+    "04607L109":"ASND","14832Q200":"CBST","30067T106":"ELV",
+    # Energy / industrials
+    "126650100":"CVX","30231G102":"XOM","26875P101":"EOG","26614N102":"DUK",
+    "67011P100":"NOC","526057104":"LMT","92204A306":"RTX","082811103":"BA",
+    "806857108":"SHW","369604103":"GEN","882508104":"TRV",
+    # Consumer / retail
+    "191241100":"KO","742718109":"PG","020002101":"MCD","857477103":"SBUX",
+    "881624209":"TGT","422806109":"HD","247361702":"KHC","084670702":"BRK.B",
+    "060505104":"BAC","166764100":"CVX",
+    # ETFs (common in quant fund 13Fs)
+    "78462F103":"SPY","46429B267":"IVV","922908769":"QQQ","78463X107":"GLD",
+    "46434G103":"IWM","78464A474":"EEM","73935A104":"TLT","464287622":"HYG",
+    "78468R671":"XLK","81369Y704":"XLF","78468R309":"XLE","81369Y407":"XLV",
+    "78468R200":"XLI","81369Y571":"XLC","921937835":"VTI","922908629":"VEA",
+    # High-profile individual names
+    "G7690C108":"STNE","08180D106":"BYD","00287Y109":"ABBV","09857L108":"UBER",
+    "67401P104":"OKTA","097930109":"AMT","80180A102":"SBA", "87612E106":"TDG",
+    "55315J102":"MPWR","83406F102":"SNAP","31620M106":"FANG","42809H107":"HES",
+    "404121105":"HUBS","45168D104":"INTU","832696405":"SMH",
 }
+
+# Lazy-loaded name→ticker map built from SEC company_tickers.json
+_NAME_TICKER_CACHE: dict = {}
+
+def _get_name_ticker_map() -> dict:
+    """Load SEC's company_tickers.json and build normalised name→ticker map."""
+    global _NAME_TICKER_CACHE
+    if _NAME_TICKER_CACHE:
+        return _NAME_TICKER_CACHE
+    try:
+        r = requests.get("https://www.sec.gov/files/company_tickers.json",
+                         headers=HEADERS, timeout=10)
+        if r.status_code == 200:
+            for v in r.json().values():
+                name = v.get("title", "").upper().strip()
+                ticker = v.get("ticker", "").strip()
+                if name and ticker:
+                    _NAME_TICKER_CACHE[name] = ticker
+                    # Also index a shortened version
+                    short = re.sub(r'\s+(INC|CORP|LTD|LLC|CO|PLC|LP|GROUP|HOLDINGS?|CLASS\s+[AB])\.?$', '', name).strip()
+                    if short != name:
+                        _NAME_TICKER_CACHE[short] = ticker
+    except Exception:
+        pass
+    return _NAME_TICKER_CACHE
+
+def _resolve_ticker(cusip: str, issuer_name: str) -> str:
+    """Return ticker from CUSIP dict, fallback to name lookup."""
+    if cusip in CUSIP_TICKER:
+        return CUSIP_TICKER[cusip]
+    name_map = _get_name_ticker_map()
+    name_upper = issuer_name.upper().strip()
+    # Try exact match
+    if name_upper in name_map:
+        return name_map[name_upper]
+    # Try stripping common suffixes
+    for suffix in [" INC", " CORP", " LTD", " LLC", " CO", " PLC", " LP",
+                   " CLASS A", " CLASS B", " DEL", " COM", " NEW"]:
+        short = name_upper.replace(suffix, "").strip()
+        if short in name_map:
+            return name_map[short]
+    return ""
 
 def _parse_xml(xml_text: str) -> List[Holding]:
     holdings = []
     try:
-        # Strip all namespace declarations (xmlns= and xmlns:prefix=)
-        xml_clean = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', xml_text)
+        # Strip XML declaration
+        xml_clean = re.sub(r'<\?xml[^>]*\?>', '', xml_text)
+        # Strip all namespace declarations: xmlns="..." and xmlns:prefix="..."
+        xml_clean = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', xml_clean)
+        # Strip namespace-qualified attributes: xsi:schemaLocation="..." etc.
+        xml_clean = re.sub(r'\s+\w+:[a-zA-Z][a-zA-Z0-9_-]*="[^"]*"', '', xml_clean)
         # Strip namespace prefixes from element tags: <n1:foo> → <foo>, </n1:foo> → </foo>
         xml_clean = re.sub(r'<(/?)[\w.\-]+:([\w])', r'<\1\2', xml_clean)
-        xml_clean = re.sub(r'<\?xml[^>]*\?>', '', xml_clean)
 
         from xml.etree import ElementTree as ET
         root = ET.fromstring(xml_clean)
@@ -191,7 +253,7 @@ def _parse_xml(xml_text: str) -> List[Holding]:
                     except ValueError:
                         v, s = 0, 0
 
-                    ticker = CUSIP_TICKER.get(cusip, "")
+                    ticker = _resolve_ticker(cusip, name)
                     # 13F value is already in $thousands — don't multiply again
                     holdings.append(Holding(
                         name=name, ticker=ticker, cusip=cusip,
