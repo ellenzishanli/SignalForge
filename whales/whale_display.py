@@ -455,25 +455,32 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
     out.rule("[cyan]Tab 1 & 2: Institutional + AI Funds[/cyan]")
 
     priority_13f = [
-        # Established legends
+        # ── Value investors & activists (highest conviction, buy-and-hold) ──────
         ("Berkshire Hathaway",    "0001067983"),
-        ("Scion Asset Mgmt",      "0001649978"),
-        ("Duquesne Family Office","0001536411"),
-        ("Pershing Square",       "0002026053"),  # correct CIK (old was wrong entity)
-        ("Viking Global",         "0001103804"),
         ("Baupost Group",         "0001060349"),
+        ("Pershing Square",       "0002026053"),
+        ("Scion Asset Mgmt",      "0001649978"),
         ("Third Point LLC",       "0001040792"),
-        ("Citadel Advisors",      "0001423298"),
-        # AI / Tech focused
-        ("Situational Awareness", "0002045724"),  # Leopold Aschenbrenner — filed 2026-05-18
+        ("Elliott Management",    "0001048268"),
+        ("Sachem Head Capital",   "0001582090"),
+        # ── Global macro / concentrated growth ───────────────────────────────────
+        ("Duquesne Family Office","0001536411"),
+        ("Viking Global",         "0001103804"),
+        ("D1 Capital Partners",   "0001747057"),
+        ("Durable Capital",       "0001798849"),
+        ("Whale Rock Capital",    "0001387322"),
+        # ── AI / Tech focused ────────────────────────────────────────────────────
+        ("Situational Awareness", "0002045724"),  # Leopold — latest 13F 2026-05-18
         ("Coatue Management",     "0001336528"),
         ("Tiger Global",          "0001167483"),
         ("Dragoneer Investment",  "0001413754"),
-        # Younger / concentrated managers
-        ("D1 Capital Partners",   "0001747057"),
-        ("Sachem Head Capital",   "0001582090"),
-        ("Durable Capital",       "0001798849"),
-        ("Whale Rock Capital",    "0001387322"),
+        # ── Quant giants (13F = long equity book only, not full strategy) ────────
+        ("Bridgewater Associates","0001350694"),
+        ("Renaissance Tech",      "0001037389"),
+        ("Citadel Advisors",      "0001423053"),  # correct CIK (was 0001423298 = wrong entity)
+        ("Point72 Asset Mgmt",    "0001603466"),
+        ("D. E. Shaw & Co.",      "0001009207"),
+        ("Two Sigma Advisers",    "0001478735"),
     ]
 
     tab12: List[WhaleTrade] = []
