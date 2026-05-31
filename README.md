@@ -1,8 +1,10 @@
 # SignalForge 🔭
 
-**AI-powered quantitative investment research platform** — smart money tracking + daily tech intelligence + multi-factor stock analysis across all market sectors.
+**Long-term value investing intelligence platform** — smart money tracking, quantitative stock analysis, and daily tech briefing in one terminal command.
 
-Built for investors, finance professionals, and quant enthusiasts who want institutional-quality signals without a Bloomberg terminal.
+Built for investors who want to think like the world's best allocators: **buy great businesses at fair prices and hold**. Not a trading tool. No day-trading signals, no short-term noise. Oriented toward Buffett/Klarman-style fundamental analysis enriched with quant scoring.
+
+> *"The stock market is a device for transferring money from the impatient to the patient."* — Warren Buffett
 
 ---
 
@@ -23,31 +25,47 @@ Track what the world's best investors are actually buying — pulled directly fr
 | **6: Congressional Trades** | QuiverQuant API | Real-time STOCK Act disclosures with verified tickers |
 | **7: Social Intelligence** | StockTwits + Finviz News + SEC RSS | Trending tickers, social sentiment on whale holdings, whale name mentions in headlines, new 13F filing alerts |
 
+**Philosophy: value investing, not trading**
+This tool surfaces what long-term, fundamental investors are buying — not momentum signals or day-trade setups. The quant engine weights fundamentals (earnings quality, FCF yield, margin expansion) over short-term technicals. Recommendations are intended for **weeks-to-years** time horizons.
+
 **Funds tracked (13F + public disclosures):**
 
-| Manager | Fund | Style |
-|---------|------|-------|
-| Warren Buffett | Berkshire Hathaway | Value / Long-only |
-| Bill Ackman | Pershing Square | Activist / Concentrated |
-| Stanley Druckenmiller | Duquesne Family Office | Global Macro |
-| Michael Burry | Scion Asset Mgmt | Contrarian / Short |
-| Leopold Aschenbrenner | Situational Awareness LP | AI Infrastructure thesis |
-| Dan Sundheim | D1 Capital Partners | Concentrated Growth |
-| Scott Ferguson | Sachem Head Capital | Activist (Ackman protégé) |
-| Henry Ellenbogen | Durable Capital Partners | Long-term Growth |
-| Alex Sacerdote | Whale Rock Capital | Tech L/S |
-| Andreas Halvorsen | Viking Global | Tiger Cub / L/S |
-| Dan Loeb | Third Point LLC | Activist / Tech |
-| Seth Klarman | Baupost Group | Deep Value |
-| Philippe Laffont | Coatue Management | Tech L/S |
-| Chase Coleman | Tiger Global | Growth / Global Tech |
-| Cathie Wood | ARK Investment Mgmt | Disruptive Innovation |
-| + Congressional insiders | QuiverQuant | STOCK Act disclosures |
+| Category | Manager | Fund | Known For |
+|----------|---------|------|-----------|
+| 🏆 Value / Activist | Warren Buffett | Berkshire Hathaway | Decade-long holds, AAPL, OXY, BofA |
+| 🏆 Value / Activist | Seth Klarman | Baupost Group | "Margin of Safety", deep value, patient |
+| 🏆 Value / Activist | Bill Ackman | Pershing Square | Concentrated activist, Chipotle, Hilton |
+| 🏆 Value / Activist | Michael Burry | Scion Asset Mgmt | Contrarian, predicted 2008, often early |
+| 🏆 Value / Activist | Dan Loeb | Third Point | Disney/Sony activism, forces change |
+| 🏆 Value / Activist | Scott Ferguson | Sachem Head Capital | Ackman protégé, 8–12 concentrated picks |
+| 📈 Growth / Macro | Stanley Druckenmiller | Duquesne Family Office | 30yr no losing year, macro inflections |
+| 📈 Growth / Macro | Andreas Halvorsen | Viking Global | Tiger Cub, deep tech + healthcare |
+| 📈 Growth / Macro | Dan Sundheim | D1 Capital | Ex-Viking CIO, AMZN/Datadog/Toast early |
+| 📈 Growth / Macro | Henry Ellenbogen | Durable Capital | Multi-year holds, GitLab/Duolingo early |
+| 📈 Growth / Macro | Alex Sacerdote | Whale Rock Capital | Shopify/Snowflake/Cloudflare early |
+| 🤖 AI / Tech | Leopold Aschenbrenner | Situational Awareness LP | Ex-OpenAI, AI infrastructure thesis |
+| 🤖 AI / Tech | Cathie Wood | ARK Investment Mgmt | Disruptive innovation, daily transparency |
+| 🤖 AI / Tech | Philippe Laffont | Coatue Management | Tech L/S Tiger Cub |
+| 🤖 AI / Tech | Chase Coleman | Tiger Global | FB/LinkedIn/Spotify early |
+| ⚙️ Quant Giants | Ray Dalio | Bridgewater Associates | All Weather, macro, $150B |
+| ⚙️ Quant Giants | Jim Simons / Peter Brown | Renaissance Technologies | Best track record ever, Medallion fund |
+| ⚙️ Quant Giants | Ken Griffin | Citadel Advisors | Largest HF by revenue, 27 winning years |
+| ⚙️ Quant Giants | Steve Cohen | Point72 Asset Mgmt | Multi-strat, 120+ pods |
+| ⚙️ Quant Giants | David Shaw | D.E. Shaw & Co. | Systematic + discretionary, early Amazon |
+| ⚙️ Quant Giants | John Overdeck | Two Sigma Advisers | ML/AI systematic, 10,000+ positions |
+| 🪙 Crypto | Michael Saylor | MicroStrategy (MSTR) | 560k+ BTC held, corporate BTC treasury |
+| 🪙 Crypto | Justin Sun (孙宇晨) | TRON / personal | On-chain whale, massive BTC/ETH moves |
+| 🪙 Crypto | Trump / WLF | World Liberty Financial | USD1 stablecoin, political crypto barometer |
+| 🏛️ Congress | via QuiverQuant | STOCK Act | Real-time congressional buy/sell disclosures |
+
+> **Note on Jane Street / investment banks**: their 13F filings reflect client flow and hedges, not investment conviction — excluded by design.
+> **Note on David Tepper (Appaloosa)**: converted to family office in 2019, no longer files public 13F. Track via Bloomberg interviews.
 
 **Recommendation engine:**
-- Each position scored on **novelty** — mega-caps (AAPL/MSFT/NVDA) are down-ranked, picks from less-followed managers (Scion, Situational Awareness, D1, Whale Rock) are boosted
-- Every ticker enriched with quant score (0–100), technical + statistical sub-scores, and a follow signal: `⭐⭐⭐ STRONG FOLLOW` → `❌ AVOID`
-- Final summary table shows `💡 non-obvious` vs `👥 consensus` for each pick
+- Positions scored on **novelty** — mega-caps (AAPL/MSFT/NVDA) down-ranked, non-consensus picks from Scion/Situational Awareness/D1/Whale Rock boosted
+- Every ticker enriched with 5-factor quant score (0–100) + follow signal: `⭐⭐⭐ STRONG FOLLOW` → `❌ AVOID`
+- Summary table flags `💡 non-obvious` vs `👥 consensus`
+- **Long-term bias**: quant weights fundamentals over short-term momentum
 
 ```bash
 python3 main.py --mode whales 2>/dev/null | less -R

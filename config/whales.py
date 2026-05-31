@@ -4,26 +4,32 @@ Organized by tab. Each entity has a CIK (for 13F), Form 4, or other data source.
 """
 
 # ── Tab 1: Top US Institutional Investors ─────────────────────────────────────
+# ── Value Investors & Activists (core long-term focus) ───────────────────────
 INSTITUTIONAL = [
-    {"name": "Berkshire Hathaway",    "manager": "Warren Buffett",        "cik": "0001067983", "style": "Value/Long-only",          "known_for": "Apple, OXY, AMEX, BofA. Never shorts. Long-term."},
-    {"name": "Scion Asset Mgmt",      "manager": "Michael Burry",         "cik": "0001649978", "style": "Contrarian/Short",         "known_for": "Predicted 2008. Concentrated shorts via puts. Often early."},
-    {"name": "Duquesne Family Office","manager": "Stanley Druckenmiller",  "cik": "0001536411", "style": "Global Macro/Growth",      "known_for": "30yr no losing year. Follows earnings momentum hard."},
-    # Pershing Square: correct CIK is 0002026053 (the old 0001477327 was a different entity)
-    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0002026053", "style": "Activist/Concentrated",    "known_for": "Chipotle, Universal Music. Loud public announcements."},
-    # Appaloosa: Tepper returned external capital ~2019, now family office — no longer files 13F
-    {"name": "Appaloosa/Tepper",      "manager": "David Tepper",          "cik": None,         "style": "Distressed/Macro",        "known_for": "Bought banks in 2009. Converted to family office 2019. Follows his public macro calls."},
-    {"name": "Third Point LLC",       "manager": "Dan Loeb",              "cik": "0001040792", "style": "Activist/Tech",            "known_for": "Disney, Sony activist. Strong tech + event-driven."},
-    {"name": "Citadel Advisors",      "manager": "Ken Griffin",           "cik": "0001423298", "style": "Multi-strategy/HFT",       "known_for": "Largest HF by revenue. Massive options flow."},
-    {"name": "Millennium Management", "manager": "Israel Englander",      "cik": "0001273931", "style": "Multi-strategy/Quant",     "known_for": "700+ portfolio managers. Quant + fundamental."},
-    {"name": "Point72 Asset Mgmt",    "manager": "Steve Cohen",           "cik": "0001603466", "style": "Multi-strategy",          "known_for": "Former SAC Capital. Strong equity L/S."},
-    {"name": "Baupost Group",         "manager": "Seth Klarman",          "cik": "0001060349", "style": "Value/Distressed",        "known_for": "Margin of Safety author. Deep value, patient."},
-    {"name": "Elliott Management",    "manager": "Paul Singer",           "cik": "0001048268", "style": "Activist/Distressed",     "known_for": "Aggressive activist. Argentina bonds. Tech activist."},
-    {"name": "Viking Global",         "manager": "Andreas Halvorsen",     "cik": "0001103804", "style": "L/S Equity/Tiger Cub",   "known_for": "Tiger Cub. Strong tech + healthcare picks."},
-    # ── Younger / emerging managers ──────────────────────────────────────────────
-    {"name": "D1 Capital Partners",   "manager": "Dan Sundheim",          "cik": "0001747057", "style": "Concentrated Growth",     "known_for": "Ex-Viking CIO. Big concentrated bets. AMZN, Datadog, Toast early."},
-    {"name": "Sachem Head Capital",   "manager": "Scott Ferguson",        "cik": "0001582090", "style": "Activist/Concentrated",   "known_for": "Ackman protégé. Runs 8-12 concentrated positions. IHS Markit, Autodesk."},
-    {"name": "Durable Capital",       "manager": "Henry Ellenbogen",      "cik": "0001798849", "style": "Long-term Growth",        "known_for": "Ex-T.Rowe. Early Duolingo, GitLab, HashiCorp. Multi-year hold style."},
-    {"name": "Whale Rock Capital",    "manager": "Alex Sacerdote",        "cik": "0001387322", "style": "Tech L/S",               "known_for": "Early Shopify, Snowflake, Cloudflare. Deep tech fundamental."},
+    {"name": "Berkshire Hathaway",    "manager": "Warren Buffett",        "cik": "0001067983", "style": "Value / Long-only",        "known_for": "Apple, OXY, AMEX, BofA. Never shorts. Decade-long holds."},
+    {"name": "Baupost Group",         "manager": "Seth Klarman",          "cik": "0001060349", "style": "Deep Value / Distressed",  "known_for": "Margin of Safety author. Patient capital. Often 30-40% cash."},
+    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0002026053", "style": "Value Activist",           "known_for": "Chipotle, Hilton, Universal Music. Concentrated 8-12 names."},
+    {"name": "Scion Asset Mgmt",      "manager": "Michael Burry",         "cik": "0001649978", "style": "Contrarian Value",        "known_for": "Predicted 2008 crash. Deep fundamental work. Often early + painful."},
+    {"name": "Third Point LLC",       "manager": "Dan Loeb",              "cik": "0001040792", "style": "Value Activist / Tech",    "known_for": "Disney, Sony, Shell activism. Forces strategic change."},
+    {"name": "Elliott Management",    "manager": "Paul Singer",           "cik": "0001048268", "style": "Activist / Distressed",   "known_for": "Largest activist HF. Tech companies, Argentina debt."},
+    {"name": "Sachem Head Capital",   "manager": "Scott Ferguson",        "cik": "0001582090", "style": "Value Activist",           "known_for": "Ackman protégé. 8-12 concentrated value positions."},
+    # ── Global Macro / Growth ─────────────────────────────────────────────────
+    {"name": "Duquesne Family Office","manager": "Stanley Druckenmiller",  "cik": "0001536411", "style": "Global Macro / Growth",   "known_for": "30yr no losing year. Reads earnings momentum + macro inflections."},
+    {"name": "Viking Global",         "manager": "Andreas Halvorsen",     "cik": "0001103804", "style": "L/S Equity / Tiger Cub",  "known_for": "Tiger Cub lineage. Strong tech + healthcare fundamental picks."},
+    {"name": "D1 Capital Partners",   "manager": "Dan Sundheim",          "cik": "0001747057", "style": "Concentrated Growth",     "known_for": "Ex-Viking CIO. Big concentrated bets. AMZN, Datadog, Toast."},
+    {"name": "Durable Capital",       "manager": "Henry Ellenbogen",      "cik": "0001798849", "style": "Long-term Growth",        "known_for": "Ex-T.Rowe. Multi-year holds. Early Duolingo, GitLab, HashiCorp."},
+    {"name": "Whale Rock Capital",    "manager": "Alex Sacerdote",        "cik": "0001387322", "style": "Tech Fundamental L/S",    "known_for": "Early Shopify, Snowflake, Cloudflare. Deep tech due diligence."},
+    # ── Quant / Macro Giants (13F shows long equity book, not full strategy) ──
+    {"name": "Bridgewater Associates","manager": "Ray Dalio",             "cik": "0001350694", "style": "Global Macro / All-Weather","known_for": "$150B. Pure Alpha + All Weather. Principles-driven macro."},
+    {"name": "Two Sigma Advisers",    "manager": "John Overdeck / David Siegel","cik": "0001478735", "style": "Quant / Systematic", "known_for": "ML + AI driven. 10,000+ positions. 13F = statistical long book."},
+    {"name": "Renaissance Technologies","manager": "Peter Brown",         "cik": "0001037389", "style": "Quant / Medallion",       "known_for": "Best track record ever. Medallion +66%/yr. 13F = Instit. Equities only."},
+    {"name": "D. E. Shaw & Co.",      "manager": "David Shaw",            "cik": "0001009207", "style": "Quant / Multi-strat",     "known_for": "Systematic + discretionary. Early Amazon investor. $60B AUM."},
+    {"name": "Citadel Advisors",      "manager": "Ken Griffin",           "cik": "0001423053", "style": "Multi-strategy / Options","known_for": "Largest HF by revenue. Massive options flow. 27 consecutive winning years."},
+    {"name": "Point72 Asset Mgmt",    "manager": "Steve Cohen",           "cik": "0001603466", "style": "Multi-strategy",          "known_for": "Former SAC Capital. Strong equity L/S. 120+ pods globally."},
+    # Appaloosa: Tepper converted to family office 2019 — no longer files 13F
+    {"name": "Appaloosa/Tepper",      "manager": "David Tepper",          "cik": None,         "style": "Distressed / Macro",      "known_for": "Bought banks in 2009 for 10x. Family office since 2019. Track via media."},
+    # Jane Street & investment banks: market makers / prop desks — not value investors
+    # Their 13F filings reflect client flow + hedges, not investment conviction
 ]
 
 # ── Tab 2: AI / Tech Focused Funds ────────────────────────────────────────────
