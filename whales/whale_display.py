@@ -21,7 +21,7 @@ from rich.rule import Rule
 from rich import box
 from bs4 import BeautifulSoup
 
-from whales.sec_13f import fetch_13f, fetch_ark_holdings, fetch_capitol_trades
+from whales.sec_13f import fetch_13f, fetch_13f_with_changes, fetch_ark_holdings, fetch_capitol_trades
 from whales.social_signals import (
     fetch_quiverquant_congress, fetch_finviz_insiders,
     fetch_stocktwits_sentiment, fetch_stocktwits_trending,
@@ -165,18 +165,44 @@ def deduplicate(trades: List[WhaleTrade], by_ticker_only: bool = False) -> List[
 # ── Data fetchers ──────────────────────────────────────────────────────────────
 
 def get_13f_trades(entity_name: str, cik: str) -> List[WhaleTrade]:
-    filing = fetch_13f(entity_name, cik)
+    """Fetch 13F with QoQ change detection. Returns one WhaleTrade per holding."""
+    filing = fetch_13f_with_changes(entity_name, cik, top_n=60)
     if not filing or not filing.holdings:
         return []
     trades = []
-    for h in filing.holdings[:12]:
+    for h in filing.holdings:
         if not h.name:
             continue
-        action = "SHORT" if h.put_call == "Put" else ("CALL" if h.put_call == "Call" else "HOLD/LONG")
+        # Decode change annotation from put_call field
+        change = "HOLD"
+        put_call_raw = h.put_call or ""
+        if put_call_raw.startswith("chg:"):
+            change = put_call_raw[4:]
+            put_call_raw = ""
+
+        if put_call_raw == "Put":
+            action = "SHORT"
+        elif put_call_raw == "Call":
+            action = "CALL"
+        elif change == "NEW":
+            action = "NEW BUY"
+        elif change == "INCREASED":
+            action = "INCREASED"
+        elif change == "DECREASED":
+            action = "DECREASED"
+        else:
+            action = "HOLD/LONG"
+
+        ticker = h.ticker or ""
+        # Skip holdings with no ticker AND no recognisable name (noise rows)
+        if not ticker and len(h.name) < 3:
+            continue
+
         trades.append(WhaleTrade(
-            whale=entity_name, ticker=h.ticker or "", company=h.name[:30],
-            action=action, value_usd_m=h.value_usd/1e6,
-            date=f"Q {filing.period[:7]}", source="SEC 13F",
+            whale=entity_name, ticker=ticker, company=h.name[:32],
+            action=action, value_usd_m=h.value_usd / 1e6,
+            date=f"Q{filing.period[:7]}", source="SEC 13F",
+            quant_signal=change,   # temporarily store change here for display
         ))
     return trades
 
@@ -322,6 +348,88 @@ def get_capitol_trades_as_whale() -> List[WhaleTrade]:
             date=t.get("filed_date","—"), source="Capitol Trades",
         ))
     return trades
+
+
+# ── Consolidated holdings table ───────────────────────────────────────────────
+
+def render_consolidated_table(trades: List[WhaleTrade], title: str,
+                               show_new_only: bool = False) -> Table:
+    """
+    Groups holdings by ticker. One row per stock/ETF.
+    Columns: Ticker | Company | # Funds | Who holds it (fund: % allocation) |
+             Total $M | Change | Quant | Signal | Follow
+    """
+    from collections import defaultdict
+
+    # Group by ticker (skip blank tickers)
+    by_ticker: Dict[str, List[WhaleTrade]] = defaultdict(list)
+    for t in trades:
+        if t.ticker and len(t.ticker) >= 1:
+            by_ticker[t.ticker.upper()].append(t)
+
+    # Filter to new/increased only if requested
+    CHANGE_PRIORITY = {"NEW BUY": 4, "INCREASED": 3, "HOLD/LONG": 2,
+                       "DECREASED": 1, "SHORT": 0, "CALL": 2}
+    rows = []
+    for ticker, ts in by_ticker.items():
+        if show_new_only:
+            has_new = any(t.action in ("NEW BUY","INCREASED") for t in ts)
+            if not has_new:
+                continue
+        best = max(ts, key=lambda t: t.quant_score)
+        total_val = sum(t.value_usd_m for t in ts)
+        fund_parts = []
+        for t in sorted(ts, key=lambda x: x.value_usd_m, reverse=True)[:4]:
+            pct_str = f"{t.value_usd_m:.0f}M" if t.value_usd_m > 0 else "?"
+            fund_parts.append(f"{t.whale[:18]}({pct_str})")
+        top_change = max(ts, key=lambda t: CHANGE_PRIORITY.get(t.action, 0)).action
+        rows.append((ticker, best, ts, total_val, fund_parts, top_change))
+
+    # Sort: new/increased first, then by total value
+    rows.sort(key=lambda r: (
+        CHANGE_PRIORITY.get(r[5], 0),
+        r[3]
+    ), reverse=True)
+
+    tbl = Table(title=title, box=box.ROUNDED, show_lines=True,
+                header_style="bold white on dark_blue", min_width=220)
+    tbl.add_column("Ticker",      width=7,  style="bold")
+    tbl.add_column("Company",     width=28, no_wrap=True)
+    tbl.add_column("Funds",       width=8,  justify="center")
+    tbl.add_column("Who + Size",  width=70, no_wrap=False)
+    tbl.add_column("Total $M",    width=10, justify="right")
+    tbl.add_column("Change",      width=12, justify="center")
+    tbl.add_column("Quant",       width=7,  justify="right")
+    tbl.add_column("Signal",      width=12, justify="center")
+    tbl.add_column("Follow",      width=14, justify="center")
+
+    CHANGE_COLOR = {"NEW BUY":"bold green","INCREASED":"green",
+                    "DECREASED":"red","HOLD/LONG":"dim","SHORT":"bold red","CALL":"cyan"}
+    FOLLOW_EMOJI = {"STRONG_FOLLOW":"⭐⭐⭐","FOLLOW":"⭐⭐","WATCH":"👁",
+                    "CAUTION":"⚠️","AVOID":"❌"}
+    FOLLOW_COLOR = {"STRONG_FOLLOW":"bold green","FOLLOW":"green",
+                    "WATCH":"yellow","CAUTION":"orange1","AVOID":"bold red"}
+    QC = {"STRONG_BUY":"bold green","BUY":"green","HOLD":"yellow","SELL":"red"}
+
+    for ticker, best, ts, total_val, fund_parts, top_change in rows[:60]:
+        q_s = "green" if best.quant_score>=60 else ("yellow" if best.quant_score>=45 else "red")
+        q_col = QC.get(best.quant_signal, "dim")
+        f_col = FOLLOW_COLOR.get(best.follow, "white")
+        c_col = CHANGE_COLOR.get(top_change, "dim")
+        sig_str = "—" if best.quant_signal in ("N/A","","HOLD","NEW BUY","INCREASED",
+                                                "DECREASED","CLOSED") else f"[{q_col}]{best.quant_signal}[/{q_col}]"
+        tbl.add_row(
+            ticker,
+            best.company[:28],
+            str(len(ts)),
+            "  ".join(fund_parts),
+            f"${total_val:.0f}M" if total_val > 0 else "—",
+            f"[{c_col}]{top_change}[/{c_col}]",
+            f"[{q_s}]{best.quant_score:.0f}[/{q_s}]" if best.quant_score > 0 else "—",
+            sig_str,
+            f"[{f_col}]{FOLLOW_EMOJI.get(best.follow,'')} {best.follow}[/{f_col}]",
+        )
+    return tbl
 
 
 # ── Rich Tables ────────────────────────────────────────────────────────────────
@@ -505,25 +613,34 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
 
     tab12: List[WhaleTrade] = []
     for name, cik in priority_13f:
-        out.print(f"  [dim]→ Fetching 13F: {name}...[/dim]")
+        out.print(f"  [dim]→ {name}...[/dim]")
         tab12.extend(get_13f_trades(name, cik))
         time.sleep(0.2)
 
     out.print("  [dim]→ ARK daily...[/dim]")
     tab12.extend(get_ark_trades("ARKK"))
 
-    out.print("  [dim]→ Dataroma superinvestors...[/dim]")
-    tab12.extend(get_dataroma_trades())
-
     out.print("  [dim]→ Running quant analysis...[/dim]")
     tab12 = enrich_with_quant(tab12)
     all_trades.extend(tab12)
 
-    # Show top 20 from institutional tab (deduplicated within this tab)
-    tab12_deduped = list(deduplicate(tab12))[:20]
-    if tab12_deduped:
-        out.print(render_trades_table(tab12_deduped, "🏦 Institutional + AI Funds — Top Positions with Quant Signal"))
-        out.print()
+    # ── Consolidated by ticker (no duplicates) ──────────────────────────────
+    out.print(render_consolidated_table(
+        tab12,
+        "🏦 All Whale Holdings — Consolidated by Stock (60 top positions per fund, QoQ change)",
+        show_new_only=False,
+    ))
+    out.print()
+
+    # ── New & Increased positions this quarter ──────────────────────────────
+    new_trades = [t for t in tab12 if t.action in ("NEW BUY", "INCREASED")]
+    if new_trades:
+        out.print(render_consolidated_table(
+            new_trades,
+            "🆕 NEW & INCREASED Positions This Quarter — Strongest Buy Signal",
+            show_new_only=True,
+        ))
+    out.print()
 
     # ── Tab 3: Crypto Whales ─────────────────────────────────────────────────
     out.rule("[cyan]Tab 4: Crypto Whales[/cyan]")

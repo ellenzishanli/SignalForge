@@ -23,8 +23,9 @@ class Holding:
     ticker: str
     cusip: str
     shares: int
-    value_usd: int        # in dollars (already *1000 from raw data)
+    value_usd: int        # in dollars (raw SEC value field)
     put_call: str         # "" | "Put" | "Call"
+    pct_of_portfolio: float = 0.0  # % of fund's total AUM
 
 
 @dataclass
@@ -39,30 +40,39 @@ class Filing13F:
 
 # ── Step 1: Get latest 13F accession number ───────────────────────────────────
 
-def _get_latest_13f_info(cik: str) -> Optional[dict]:
+def _get_13f_info_list(cik: str, max_count: int = 4) -> List[dict]:
+    """Return the N most recent 13F-HR filing infos for a CIK (for QoQ comparison)."""
     cik_padded = cik.lstrip("0").zfill(10)
     url = f"https://data.sec.gov/submissions/CIK{cik_padded}.json"
+    results = []
     try:
         r = requests.get(url, headers=HEADERS, timeout=12)
         r.raise_for_status()
         data = r.json()
         filings = data.get("filings", {}).get("recent", {})
-        forms  = filings.get("form", [])
-        accs   = filings.get("accessionNumber", [])
-        dates  = filings.get("filingDate", [])
-        periods= filings.get("reportDate", [])
+        forms   = filings.get("form", [])
+        accs    = filings.get("accessionNumber", [])
+        dates   = filings.get("filingDate", [])
+        periods = filings.get("reportDate", [])
         for i, form in enumerate(forms):
             if form in ("13F-HR", "13F-HR/A"):
-                return {
+                results.append({
                     "accession_raw": accs[i],
                     "accession":     accs[i].replace("-", ""),
                     "filed_date":    dates[i],
                     "period":        periods[i],
                     "cik_int":       str(int(cik.lstrip("0") or "0")),
-                }
+                })
+                if len(results) >= max_count:
+                    break
     except Exception as e:
         print(f"  [13F] submissions error for CIK {cik}: {e}")
-    return None
+    return results
+
+
+def _get_latest_13f_info(cik: str) -> Optional[dict]:
+    infos = _get_13f_info_list(cik, max_count=1)
+    return infos[0] if infos else None
 
 
 # ── Step 2: Get filing index → find correct XML filename ─────────────────────
@@ -267,35 +277,97 @@ def _parse_xml(xml_text: str) -> List[Holding]:
 
 # ── Main fetch function ────────────────────────────────────────────────────────
 
-def fetch_13f(entity_name: str, cik: str) -> Optional[Filing13F]:
-    if not cik:
-        return None
-    info = _get_latest_13f_info(cik)
-    if not info:
-        print(f"  [13F] No 13F found for {entity_name}")
-        return None
-
-    time.sleep(0.25)  # polite rate limiting
-
+def _fetch_filing(info: dict, entity_name: str, cik: str) -> Optional[Filing13F]:
+    """Fetch and parse a single 13F filing given its info dict."""
     xml_url = _try_xml_names(info["cik_int"], info["accession"])
     if not xml_url:
-        print(f"  [13F] XML not found for {entity_name} ({info['period']})")
         return Filing13F(entity_name=entity_name, cik=cik,
                          period=info["period"], filed_date=info["filed_date"],
                          total_value_usd=0)
-
     try:
         r = requests.get(xml_url, headers=HEADERS, timeout=15)
         r.raise_for_status()
         holdings = _parse_xml(r.text)
-        total    = sum(h.value_usd for h in holdings)
-        print(f"  [13F] ✓ {entity_name}: {len(holdings)} holdings, ${total/1e9:.1f}B AUM ({info['period']})")
+        total = sum(h.value_usd for h in holdings)
+        # Compute % of portfolio for each holding
+        for h in holdings:
+            h.pct_of_portfolio = round(h.value_usd / total * 100, 2) if total else 0.0
         return Filing13F(entity_name=entity_name, cik=cik,
                          period=info["period"], filed_date=info["filed_date"],
-                         total_value_usd=total, holdings=holdings[:30])
+                         total_value_usd=total, holdings=holdings)
     except Exception as e:
         print(f"  [13F] fetch error for {entity_name}: {e}")
         return None
+
+
+def fetch_13f(entity_name: str, cik: str, top_n: int = 60) -> Optional[Filing13F]:
+    """Fetch latest 13F. Returns top_n holdings sorted by value."""
+    if not cik:
+        return None
+    infos = _get_13f_info_list(cik, max_count=1)
+    if not infos:
+        print(f"  [13F] No 13F found for {entity_name}")
+        return None
+    time.sleep(0.25)
+    filing = _fetch_filing(infos[0], entity_name, cik)
+    if filing and filing.holdings:
+        print(f"  [13F] ✓ {entity_name}: {len(filing.holdings)} holdings, "
+              f"${filing.total_value_usd/1e9:.1f}B ({filing.period})")
+        filing.holdings = filing.holdings[:top_n]
+    return filing
+
+
+def fetch_13f_with_changes(entity_name: str, cik: str, top_n: int = 60) -> Optional[Filing13F]:
+    """
+    Fetch latest 13F AND compare to previous quarter.
+    Annotates each Holding with change vs prev quarter in put_call field:
+      'NEW' | 'INCREASED' | 'DECREASED' | 'HOLD' | 'CLOSED'
+    """
+    if not cik:
+        return None
+    infos = _get_13f_info_list(cik, max_count=2)
+    if not infos:
+        print(f"  [13F] No 13F found for {entity_name}")
+        return None
+
+    time.sleep(0.25)
+    current = _fetch_filing(infos[0], entity_name, cik)
+    if not current or not current.holdings:
+        return current
+
+    # Build previous quarter CUSIP → value map
+    prev_values: Dict[str, int] = {}
+    if len(infos) > 1:
+        time.sleep(0.25)
+        prev = _fetch_filing(infos[1], entity_name, cik)
+        if prev and prev.holdings:
+            prev_values = {h.cusip: h.value_usd for h in prev.holdings}
+
+    # Annotate changes
+    for h in current.holdings:
+        prev_v = prev_values.get(h.cusip, 0)
+        if prev_v == 0 and h.value_usd > 0:
+            change = "NEW"
+        elif prev_v > 0 and h.value_usd == 0:
+            change = "CLOSED"
+        elif prev_v > 0:
+            ratio = h.value_usd / prev_v
+            if ratio >= 1.25:
+                change = "INCREASED"
+            elif ratio <= 0.75:
+                change = "DECREASED"
+            else:
+                change = "HOLD"
+        else:
+            change = "HOLD"
+        # Encode change in put_call field to avoid schema change
+        h.put_call = f"chg:{change}" if not h.put_call else h.put_call
+
+    print(f"  [13F] ✓ {entity_name}: {len(current.holdings)} holdings "
+          f"${current.total_value_usd/1e9:.1f}B ({current.period}) "
+          f"[vs {infos[1]['period'] if len(infos)>1 else 'no prev'}]")
+    current.holdings = current.holdings[:top_n]
+    return current
 
 
 # ── ARK Daily ─────────────────────────────────────────────────────────────────
