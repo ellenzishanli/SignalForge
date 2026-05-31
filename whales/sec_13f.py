@@ -158,8 +158,10 @@ CUSIP_TICKER = {
 def _parse_xml(xml_text: str) -> List[Holding]:
     holdings = []
     try:
-        # Strip namespaces for easier parsing
-        xml_clean = re.sub(r' xmlns[^"]*"[^"]*"', '', xml_text)
+        # Strip all namespace declarations (xmlns= and xmlns:prefix=)
+        xml_clean = re.sub(r'\s+xmlns(?::\w+)?="[^"]*"', '', xml_text)
+        # Strip namespace prefixes from element tags: <n1:foo> → <foo>, </n1:foo> → </foo>
+        xml_clean = re.sub(r'<(/?)[\w.\-]+:([\w])', r'<\1\2', xml_clean)
         xml_clean = re.sub(r'<\?xml[^>]*\?>', '', xml_clean)
 
         from xml.etree import ElementTree as ET
@@ -237,26 +239,22 @@ def fetch_13f(entity_name: str, cik: str) -> Optional[Filing13F]:
 # ── ARK Daily ─────────────────────────────────────────────────────────────────
 
 def fetch_ark_holdings(fund: str = "ARKK") -> List[Dict]:
-    from config.whales import ARK_FUNDS
-    url = ARK_FUNDS.get(fund)
-    if not url:
-        return []
+    """Fetch ARK ETF holdings from arkfunds.io API (ark-funds.com CSV is geo-blocked)."""
     try:
+        url = f"https://arkfunds.io/api/v2/etf/holdings?symbol={fund}"
         r = requests.get(url, headers=WEB_HEADERS, timeout=12)
-        lines = [l for l in r.text.strip().split("\n") if l.strip()]
+        if r.status_code != 200:
+            return []
+        raw = r.json()
+        # API returns {"holdings": [...]} or {"data": [...]}
+        items = raw.get("holdings") or raw.get("data") or []
         holdings = []
-        for line in lines[1:]:
-            parts = [p.strip().strip('"') for p in line.split(",")]
-            if len(parts) < 6:
-                continue
-            ticker = parts[3] if len(parts) > 3 else ""
-            name   = parts[2] if len(parts) > 2 else ""
-            try:
-                shares = int(parts[5].replace(",", "")) if parts[5] else 0
-                weight = float(parts[7].replace("%","")) if len(parts) > 7 and parts[7] else 0
-            except (ValueError, IndexError):
-                shares, weight = 0, 0
-            if ticker:
+        for h in items:
+            ticker = (h.get("ticker") or "").strip()
+            name   = (h.get("company") or h.get("name") or ticker)[:30]
+            weight = float(h.get("weight", h.get("weight_pct", 0)) or 0)
+            shares = int(h.get("shares", 0) or 0)
+            if ticker and re.match(r'^[A-Z]{1,5}$', ticker):
                 holdings.append({"fund": fund, "ticker": ticker,
                                   "name": name, "shares": shares, "weight_pct": weight})
         return sorted(holdings, key=lambda x: x["weight_pct"], reverse=True)[:20]

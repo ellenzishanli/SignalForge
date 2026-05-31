@@ -8,8 +8,10 @@ INSTITUTIONAL = [
     {"name": "Berkshire Hathaway",    "manager": "Warren Buffett",        "cik": "0001067983", "style": "Value/Long-only",          "known_for": "Apple, OXY, AMEX, BofA. Never shorts. Long-term."},
     {"name": "Scion Asset Mgmt",      "manager": "Michael Burry",         "cik": "0001649978", "style": "Contrarian/Short",         "known_for": "Predicted 2008. Concentrated shorts via puts. Often early."},
     {"name": "Duquesne Family Office","manager": "Stanley Druckenmiller",  "cik": "0001536411", "style": "Global Macro/Growth",      "known_for": "30yr no losing year. Follows earnings momentum hard."},
-    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0001477327", "style": "Activist/Concentrated",    "known_for": "Chipotle, Universal Music. Loud public announcements."},
-    {"name": "Appaloosa Management",  "manager": "David Tepper",          "cik": "0001006438", "style": "Distressed/Event",         "known_for": "Bought banks in 2009 bottom. Risk-on/off caller."},
+    # Pershing Square: correct CIK is 0002026053 (the old 0001477327 was a different entity)
+    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0002026053", "style": "Activist/Concentrated",    "known_for": "Chipotle, Universal Music. Loud public announcements."},
+    # Appaloosa: Tepper returned external capital ~2019, now family office — no longer files 13F
+    {"name": "Appaloosa/Tepper",      "manager": "David Tepper",          "cik": None,         "style": "Distressed/Macro",        "known_for": "Bought banks in 2009. Converted to family office 2019. Follows his public macro calls."},
     {"name": "Third Point LLC",       "manager": "Dan Loeb",              "cik": "0001040792", "style": "Activist/Tech",            "known_for": "Disney, Sony activist. Strong tech + event-driven."},
     {"name": "Citadel Advisors",      "manager": "Ken Griffin",           "cik": "0001423298", "style": "Multi-strategy/HFT",       "known_for": "Largest HF by revenue. Massive options flow."},
     {"name": "Millennium Management", "manager": "Israel Englander",      "cik": "0001273931", "style": "Multi-strategy/Quant",     "known_for": "700+ portfolio managers. Quant + fundamental."},
@@ -17,24 +19,30 @@ INSTITUTIONAL = [
     {"name": "Baupost Group",         "manager": "Seth Klarman",          "cik": "0001060349", "style": "Value/Distressed",        "known_for": "Margin of Safety author. Deep value, patient."},
     {"name": "Elliott Management",    "manager": "Paul Singer",           "cik": "0001048268", "style": "Activist/Distressed",     "known_for": "Aggressive activist. Argentina bonds. Tech activist."},
     {"name": "Viking Global",         "manager": "Andreas Halvorsen",     "cik": "0001103804", "style": "L/S Equity/Tiger Cub",   "known_for": "Tiger Cub. Strong tech + healthcare picks."},
+    # ── Younger / emerging managers ──────────────────────────────────────────────
+    {"name": "D1 Capital Partners",   "manager": "Dan Sundheim",          "cik": "0001747057", "style": "Concentrated Growth",     "known_for": "Ex-Viking CIO. Big concentrated bets. AMZN, Datadog, Toast early."},
+    {"name": "Sachem Head Capital",   "manager": "Scott Ferguson",        "cik": "0001582090", "style": "Activist/Concentrated",   "known_for": "Ackman protégé. Runs 8-12 concentrated positions. IHS Markit, Autodesk."},
+    {"name": "Durable Capital",       "manager": "Henry Ellenbogen",      "cik": "0001798849", "style": "Long-term Growth",        "known_for": "Ex-T.Rowe. Early Duolingo, GitLab, HashiCorp. Multi-year hold style."},
+    {"name": "Whale Rock Capital",    "manager": "Alex Sacerdote",        "cik": "0001387322", "style": "Tech L/S",               "known_for": "Early Shopify, Snowflake, Cloudflare. Deep tech fundamental."},
 ]
 
 # ── Tab 2: AI / Tech Focused Funds ────────────────────────────────────────────
 AI_FUNDS = [
-    {"name": "Situational Awareness LP","manager": "Leopold Aschenbrenner","cik": None,         "style": "AI Infrastructure",       "known_for": "Q1'26 $13.67B. Long BTC miners (energy=AI bottleneck). Short NVDA $7.46B puts."},
+    # Situational Awareness: correct CIK is 0002045724, files 13F — latest 2026-05-18
+    {"name": "Situational Awareness LP","manager": "Leopold Aschenbrenner","cik": "0002045724", "style": "AI Infrastructure",       "known_for": "Ex-OpenAI. $13.67B AUM. AI compute = energy bottleneck thesis. BTC miners, NVDA puts."},
     {"name": "ARK Investment Mgmt",    "manager": "Cathie Wood",           "cik": "0001579982", "style": "Disruptive Innovation",   "known_for": "TSLA early, COIN early. Publishes ALL trades DAILY."},
     {"name": "Coatue Management",      "manager": "Philippe Laffont",      "cik": "0001336528", "style": "Tech L/S / Tiger Cub",   "known_for": "Alibaba early, Snap, Lyft. Strong China tech."},
     {"name": "Tiger Global",           "manager": "Chase Coleman",         "cik": "0001167483", "style": "Growth / Global Tech",   "known_for": "Facebook, LinkedIn, Spotify early. VC + public."},
     {"name": "a16z (Andreessen)",      "manager": "Marc Andreessen",       "cik": "0001569190", "style": "VC / Crypto",            "known_for": "Coinbase, OpenSea, Solana. $7B+ crypto fund."},
     {"name": "Founders Fund",          "manager": "Peter Thiel",           "cik": None,         "style": "VC / Contrarian",        "known_for": "SpaceX, Palantir, Anduril. Anti-consensus."},
     {"name": "Sequoia Capital",        "manager": "Roelof Botha",          "cik": "0001783398", "style": "VC / Global",            "known_for": "Apple, Google, OpenAI, Stripe early."},
-    {"name": "General Catalyst",       "manager": "Hemant Taneja",         "cik": None,         "style": "VC / AI Health",         "known_for": "Stripe, Airbnb, Warby Parker. Big on AI+healthcare."},
     {"name": "Dragoneer Investment",   "manager": "Marc Stad",             "cik": "0001413754", "style": "Growth / SaaS",          "known_for": "Snowflake, Nubank, Roblox early backer."},
 ]
 
 # ── Tab 3: Asia Whales ────────────────────────────────────────────────────────
 ASIA_WHALES = [
-    {"name": "Hillhouse Capital",      "manager": "Zhang Lei (张磊)",      "cik": "0001709283", "style": "Long-term / China+Global","known_for": "JD.com, Meituan, CATL early. Yale endowment style."},
+    # Hillhouse stopped US 13F filings in 2021 (went private / reduced US exposure)
+    {"name": "Hillhouse Capital",      "manager": "Zhang Lei (张磊)",      "cik": "0001762304", "style": "Long-term / China+Global", "known_for": "JD.com, Meituan, CATL early. Yale endowment style. Last 13F: Q1 2021."},
     {"name": "SoftBank Vision Fund",   "manager": "Masayoshi Son",         "cik": "0001640251", "style": "Tech Moonshots",          "known_for": "Arm, Alibaba. Now: $100B+ OpenAI ecosystem bets."},
     {"name": "GIC Singapore",          "manager": "GIC Private Ltd",       "cik": "0001641614", "style": "Sovereign Wealth",        "known_for": "$770B+ AUM. Patient capital. Infrastructure focus."},
     {"name": "Temasek Holdings",       "manager": "Singapore Govt",        "cik": None,         "style": "Sovereign Wealth",        "known_for": "$300B AUM. Grab, GoTo, ByteDance, Alibaba exposure."},

@@ -1,101 +1,91 @@
 """
 Whale Tracker Display
-Core output: WHAT did smart money BUY/SELL recently + our quant verdict on that ticker.
-
-Layout per whale:
-  [Identity card — 1 line]
-  [Recent trades table: Ticker | Action | Size | Date | Quant Score | Follow Signal]
+Core output: WHAT did smart money BUY/SELL + our quant verdict → Follow signal.
 
 Follow signal logic:
-  Whale BOUGHT + Quant BUY  → ⭐⭐⭐ STRONG FOLLOW
-  Whale BOUGHT + Quant HOLD → ⭐⭐   FOLLOW (whale sees something quant doesn't yet)
-  Whale BOUGHT + Quant SELL → ⭐     WATCH  (conflicting signals — investigate)
-  Whale SOLD   + Quant BUY  → ⚠️    CAUTION (whale exiting, but technicals still ok)
-  Whale SOLD   + Quant SELL → ❌    AVOID  (smart money leaving + quant confirms)
+  Whale BUY  + Quant BUY  → ⭐⭐⭐ STRONG FOLLOW
+  Whale BUY  + Quant HOLD → ⭐⭐   FOLLOW
+  Whale BUY  + Quant SELL → ⭐     WATCH
+  Whale SELL + Quant BUY  → ⚠️    CAUTION
+  Whale SELL + Quant SELL → ❌    AVOID
 """
-import sys, os, time
+import sys, os, time, re
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import requests
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 from rich.table import Table
-from rich.panel import Panel
 from rich.console import Console
 from rich.rule import Rule
-from rich.text import Text
 from rich import box
 from bs4 import BeautifulSoup
 
-from whales.sec_13f import fetch_13f, fetch_ark_holdings, fetch_capitol_trades, Filing13F, Holding
-from config.whales import ALL_WHALES, TAB_LABELS, ARK_FUNDS, ADDITIONAL_SOURCES
+from whales.sec_13f import fetch_13f, fetch_ark_holdings, fetch_capitol_trades
+from whales.social_signals import (
+    fetch_quiverquant_congress, fetch_finviz_insiders,
+    fetch_stocktwits_sentiment, fetch_stocktwits_trending,
+    fetch_whale_news, fetch_sec_13f_alerts,
+)
+from config.whales import ALL_WHALES
 
 console = Console(width=220)
+WEB_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+SEC_HEADERS = {"User-Agent": "SignalForge research@signalforge.io"}
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
-
-
-# ── Data structure for a single whale trade ────────────────────────────────────
 
 @dataclass
 class WhaleTrade:
-    whale:        str           # e.g. "Berkshire Hathaway (Buffett)"
-    ticker:       str           # e.g. "AAPL"
-    company:      str           # e.g. "Apple Inc"
-    action:       str           # BUY / SELL / INCREASE / DECREASE / NEW / CLOSED / HOLD
-    value_usd_m:  float         # in $M
-    date:         str           # "Q1 2026" or "2026-05-15"
-    source:       str           # "13F" / "ARK Daily" / "Capitol Trades" / "Form 4"
-    # Quant scores (populated separately)
-    quant_score:  float = 0.0
-    quant_signal: str = "N/A"
-    tech_score:   float = 0.0
-    stat_score:   float = 0.0
-    follow:       str = "WATCH"     # STRONG_FOLLOW / FOLLOW / WATCH / CAUTION / AVOID
-    follow_reason: str = ""
+    whale:         str
+    ticker:        str
+    company:       str
+    action:        str    # BUY / SELL / INCREASE / DECREASE / HOLD/LONG / SHORT
+    value_usd_m:   float  # in $M, 0 if unknown
+    date:          str
+    source:        str
+    quant_score:   float = 0.0
+    quant_signal:  str   = "N/A"
+    tech_score:    float = 0.0
+    stat_score:    float = 0.0
+    follow:        str   = "WATCH"
+    follow_reason: str   = ""
 
 
-def _follow_signal(action: str, quant_signal: str, quant_score: float) -> Tuple[str, str]:
-    """Combine whale action + quant signal → follow recommendation."""
-    is_buy  = action in ("BUY", "NEW", "INCREASE")
-    is_sell = action in ("SELL", "CLOSED", "DECREASE")
-    q_buy   = quant_signal in ("STRONG_BUY", "BUY")
-    q_sell  = quant_signal in ("SELL", "STRONG_SELL")
-    q_hold  = quant_signal == "HOLD"
+def _follow_signal(action: str, qs: str, score: float) -> Tuple[str, str]:
+    is_buy  = any(x in action for x in ("BUY","NEW","INCREASE","PURCHASE","Purchase"))
+    is_sell = any(x in action for x in ("SELL","CLOSED","DECREASE","Sale","sale"))
+    q_buy   = qs in ("STRONG_BUY","BUY")
+    q_sell  = qs in ("SELL","STRONG_SELL")
 
-    if is_buy and q_buy:
-        return "STRONG_FOLLOW", f"Whale buying + quant confirms (score {quant_score:.0f})"
-    if is_buy and q_hold:
-        return "FOLLOW", f"Whale buying (quant neutral {quant_score:.0f}) — momentum may follow"
-    if is_buy and q_sell:
-        return "WATCH", f"Whale buying BUT quant bearish ({quant_score:.0f}) — investigate why"
-    if is_sell and q_buy:
-        return "CAUTION", f"Whale exiting despite quant BUY ({quant_score:.0f}) — whale may know more"
-    if is_sell and q_hold:
-        return "CAUTION", f"Whale selling + quant neutral — wait"
-    if is_sell and q_sell:
-        return "AVOID", f"Whale selling + quant confirms bearish ({quant_score:.0f})"
+    if is_buy  and q_buy:   return "STRONG_FOLLOW", f"Whale buying + quant confirms (score {score:.0f})"
+    if is_buy  and not q_sell: return "FOLLOW",     f"Whale buying — quant {qs} ({score:.0f})"
+    if is_buy  and q_sell:  return "WATCH",         f"Whale buying but quant bearish ({score:.0f}) — investigate"
+    if is_sell and q_buy:   return "CAUTION",       f"Whale exiting despite quant BUY ({score:.0f}) — whale may know more"
+    if is_sell and q_sell:  return "AVOID",         f"Whale selling + quant confirms bearish ({score:.0f})"
     return "WATCH", "Insufficient signal"
 
 
 def _get_quant_for_ticker(ticker: str) -> Dict:
-    """Fetch quick quant score for a specific ticker."""
+    """Fetch quant score for a ticker. Returns defaults if fails."""
+    default = {"score": 0, "signal": "N/A", "tech": 0, "stat": 0}
     try:
-        import yfinance as yf
-        import types
+        import yfinance as yf, types
         from stocks.quant import build_quant_report
 
         t    = yf.Ticker(ticker)
         hist = t.history(period="6mo")
         if hist.empty or len(hist) < 30:
-            return {"score": 0, "signal": "N/A", "tech": 0, "stat": 0}
-
+            return default
         closes = hist["Close"]
         info   = t.info
 
         def safe(v):
-            try: return float(v) if v and v == v else None
+            try: f = float(v); return None if f != f else f
             except: return None
+
+        rg = safe(info.get("revenueGrowth"))
+        eg = safe(info.get("earningsGrowth"))
+        mg = safe(info.get("profitMargins"))
 
         sd = types.SimpleNamespace(
             ticker=ticker,
@@ -103,11 +93,11 @@ def _get_quant_for_ticker(ticker: str) -> Dict:
             pb_ratio=safe(info.get("priceToBook")),
             ps_ratio=safe(info.get("priceToSalesTrailing12Months")),
             forward_pe=safe(info.get("forwardPE")),
-            revenue_growth=round(safe(info.get("revenueGrowth")) * 100, 1) if safe(info.get("revenueGrowth")) else None,
-            earnings_growth=round(safe(info.get("earningsGrowth")) * 100, 1) if safe(info.get("earningsGrowth")) else None,
-            profit_margin=round(safe(info.get("profitMargins")) * 100, 1) if safe(info.get("profitMargins")) else None,
-            return_1m=round((float(closes.iloc[-1]) / float(closes.iloc[-22]) - 1) * 100, 2) if len(closes) > 22 else 0,
-            return_6m=round((float(closes.iloc[-1]) / float(closes.iloc[0]) - 1) * 100, 2),
+            revenue_growth=round(rg*100,1) if rg else None,
+            earnings_growth=round(eg*100,1) if eg else None,
+            profit_margin=round(mg*100,1) if mg else None,
+            return_1m=round((float(closes.iloc[-1])/float(closes.iloc[-22])-1)*100,2) if len(closes)>22 else 0,
+            return_6m=round((float(closes.iloc[-1])/float(closes.iloc[0])-1)*100,2),
             return_1y=0, upside_to_target=None, is_etf=False, gem_category=None,
         )
         qr = build_quant_report(sd, closes, hist)
@@ -116,286 +106,334 @@ def _get_quant_for_ticker(ticker: str) -> Dict:
             "signal": qr.signal_type,
             "tech":   qr.technical.composite_score,
             "stat":   qr.statistical.composite_score,
-            "ml":     qr.ml_trend.ml_score,
-            "hurst":  qr.statistical.hurst.hurst,
-            "kz":     qr.statistical.kalman.kalman_zscore,
         }
-    except Exception as e:
-        return {"score": 0, "signal": "N/A", "tech": 0, "stat": 0, "ml": 0, "hurst": 0, "kz": 0}
+    except Exception:
+        return default
 
 
-# ── Fetch recent trades from various sources ───────────────────────────────────
+def enrich_with_quant(trades: List[WhaleTrade]) -> List[WhaleTrade]:
+    """Add quant scores to trades. Caches by ticker to avoid re-fetching."""
+    cache: Dict[str, Dict] = {}
+    for t in trades:
+        ticker = t.ticker.upper().strip()
+        if not ticker or ticker in ("—","N/A","") or len(ticker) > 6:
+            continue
+        if ticker not in cache:
+            cache[ticker] = _get_quant_for_ticker(ticker)
+            time.sleep(0.15)
+        q = cache[ticker]
+        t.quant_score  = q["score"]
+        t.quant_signal = q["signal"]
+        t.tech_score   = q["tech"]
+        t.stat_score   = q["stat"]
+        t.follow, t.follow_reason = _follow_signal(t.action, t.quant_signal, t.quant_score)
+    return trades
+
+
+def deduplicate(trades: List[WhaleTrade], by_ticker_only: bool = False) -> List[WhaleTrade]:
+    """Remove exact duplicates.
+    by_ticker_only=True → keep best-scored entry per ticker (for summary table).
+    by_ticker_only=False → keep one entry per (whale, ticker) pair.
+    """
+    seen: Dict[str, WhaleTrade] = {}
+    for t in trades:
+        key = t.ticker.upper() if by_ticker_only else f"{t.whale}|{t.ticker.upper()}"
+        if key not in seen or t.quant_score > seen[key].quant_score:
+            seen[key] = t
+    return sorted(seen.values(), key=lambda x: x.quant_score, reverse=True)
+
+
+# ── Data fetchers ──────────────────────────────────────────────────────────────
 
 def get_13f_trades(entity_name: str, cik: str) -> List[WhaleTrade]:
-    """Extract top holdings changes from a 13F filing."""
     filing = fetch_13f(entity_name, cik)
     if not filing or not filing.holdings:
         return []
-
     trades = []
-    for h in filing.holdings[:10]:
-        if not h.ticker and not h.name:
+    for h in filing.holdings[:12]:
+        if not h.name:
             continue
         action = "SHORT" if h.put_call == "Put" else ("CALL" if h.put_call == "Call" else "HOLD/LONG")
         trades.append(WhaleTrade(
-            whale=entity_name,
-            ticker=h.ticker or h.cusip[:6],
-            company=h.name[:30],
-            action=action,
-            value_usd_m=h.value_usd / 1e6,
-            date=f"Q {filing.period}",
-            source="SEC 13F",
+            whale=entity_name, ticker=h.ticker or "", company=h.name[:30],
+            action=action, value_usd_m=h.value_usd/1e6,
+            date=f"Q {filing.period[:7]}", source="SEC 13F",
         ))
     return trades
 
 
 def get_ark_trades(fund: str = "ARKK") -> List[WhaleTrade]:
-    """ARK daily holdings — top positions."""
     holdings = fetch_ark_holdings(fund)
-    trades = []
-    for h in holdings[:8]:
-        trades.append(WhaleTrade(
-            whale=f"ARK ({fund})",
-            ticker=h.get("ticker", "—"),
-            company=h.get("name", "")[:30],
-            action="HOLD/LONG",
-            value_usd_m=0,
-            date="Today",
-            source="ARK Daily",
-        ))
-    return trades
+    return [WhaleTrade(
+        whale=f"ARK {fund} (Cathie Wood)", ticker=h.get("ticker",""),
+        company=h.get("name","")[:30], action="HOLD/LONG",
+        value_usd_m=0, date="Today", source="ARK Daily",
+    ) for h in holdings[:8] if h.get("ticker")]
 
 
-def get_capitol_trades_as_whale() -> List[WhaleTrade]:
-    """Convert Capitol Trades data to WhaleTrade format."""
-    raw = fetch_capitol_trades(limit=20)
-    trades = []
-    for t in raw:
-        action = "BUY" if "Purchase" in t.get("action", "") else ("SELL" if "Sale" in t.get("action", "") else "UNKNOWN")
-        trades.append(WhaleTrade(
-            whale=t.get("politician", "Congress"),
-            ticker=t.get("ticker", "—"),
-            company=t.get("ticker", "—"),
-            action=action,
-            value_usd_m=0,
-            date=t.get("filed_date", "—"),
-            source="Capitol Trades",
-        ))
-    return [t for t in trades if t.ticker and t.ticker != "—"]
-
-
-def get_openinsider_trades() -> List[WhaleTrade]:
-    """Scrape OpenInsider for recent insider buying (Form 4)."""
-    url = "https://openinsider.com/screener?s=&o=&pl=100000&ph=&ll=&lh=&fd=14&fdr=&td=0&tdr=&xp=1&vl=&vh=&sic1=-1&grp=0&cnt=20&page=1"
-    trades = []
+def _load_cik_ticker_map() -> Dict[str, str]:
+    """Load SEC's official CIK→ticker map (cached in memory)."""
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        soup = BeautifulSoup(r.text, "html.parser")
-        table = soup.select_one("table.tinytable")
-        if not table:
-            return []
-        for row in table.select("tbody tr")[:15]:
-            cells = [td.get_text(strip=True) for td in row.select("td")]
-            if len(cells) >= 10:
-                ticker = cells[3] if len(cells) > 3 else "—"
-                name   = cells[5] if len(cells) > 5 else "—"
-                ttype  = cells[7] if len(cells) > 7 else "—"
-                value  = cells[9] if len(cells) > 9 else "0"
-                date   = cells[1] if len(cells) > 1 else "—"
-                if "P" in ttype:  # Purchase
-                    try:
-                        v = float(value.replace("$","").replace(",","").replace("+","")) / 1e6
-                    except:
-                        v = 0
-                    trades.append(WhaleTrade(
-                        whale=f"Insider: {name[:20]}",
-                        ticker=ticker, company=ticker,
-                        action="BUY (Insider)", value_usd_m=v,
-                        date=date, source="Form 4 / OpenInsider",
-                    ))
+        r = requests.get("https://www.sec.gov/files/company_tickers.json",
+                         headers=SEC_HEADERS, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            return {str(v["cik_str"]).zfill(10): v["ticker"]
+                    for v in data.values() if v.get("ticker")}
+    except Exception:
+        pass
+    return {}
+
+
+def get_sec_form4_insider() -> List[WhaleTrade]:
+    """
+    Fetch recent insider buying (Form 4) from SEC EDGAR.
+    Strategy: search EDGAR full-text for Form 4 filings, get the issuer CIK
+    from the filing XML, look up the ticker from SEC's official CIK→ticker map.
+    """
+    trades: List[WhaleTrade] = []
+
+    # Step 1: load SEC's official ticker map
+    cik_to_ticker = _load_cik_ticker_map()
+
+    # Step 2: search EDGAR for Form 4 filings over last 90 days
+    from datetime import datetime, timedelta
+    start_dt = (datetime.today() - timedelta(days=90)).strftime("%Y-%m-%d")
+    try:
+        url = (f"https://efts.sec.gov/LATEST/search-index?q=%22P+-+Purchase%22"
+               f"&forms=4&dateRange=custom&startdt={start_dt}&category=form-type")
+        r = requests.get(url, headers=SEC_HEADERS, timeout=12)
+        hits = r.json().get("hits", {}).get("hits", []) if r.status_code == 200 else []
+
+        seen_tickers: set = set()
+        for hit in hits[:40]:
+            s = hit.get("_source", {})
+            adsh = s.get("adsh", "")
+            date = s.get("file_date", "")[:10]
+            filer = (s.get("display_names") or ["Unknown"])[0][:22]
+
+            if not adsh:
+                continue
+
+            # Step 3: fetch filing index to find issuer CIK (different from filer CIK)
+            try:
+                acc = adsh.replace("-", "")
+                # The filer entity_id is the reporting person's CIK
+                filer_cik = str(s.get("entity_id", "")).zfill(10)
+                # Fetch the actual Form 4 XML to get the issuer CIK
+                base = f"https://www.sec.gov/Archives/edgar/data/{filer_cik.lstrip('0')}/{acc}/"
+                idx_r = requests.get(base, headers=SEC_HEADERS, timeout=6)
+                if idx_r.status_code != 200:
+                    continue
+                # Find the .xml file in the index
+                xml_link = re.search(r'href="([^"]+\.xml)"', idx_r.text)
+                if not xml_link:
+                    continue
+                xml_url = "https://www.sec.gov" + xml_link.group(1) if xml_link.group(1).startswith("/") else base + xml_link.group(1)
+                xr = requests.get(xml_url, headers=SEC_HEADERS, timeout=8)
+                if xr.status_code != 200:
+                    continue
+                # Extract issuerCik from the Form 4 XML
+                issuer_cik_m = re.search(r"<issuerCik>(\d+)</issuerCik>", xr.text)
+                issuer_name_m = re.search(r"<issuerName>([^<]+)</issuerName>", xr.text)
+                if not issuer_cik_m:
+                    continue
+                issuer_cik = issuer_cik_m.group(1).zfill(10)
+                issuer_name = issuer_name_m.group(1) if issuer_name_m else issuer_cik
+                ticker = cik_to_ticker.get(issuer_cik, "")
+                if not ticker or ticker in seen_tickers:
+                    continue
+                seen_tickers.add(ticker)
+                trades.append(WhaleTrade(
+                    whale=f"Insider: {filer}",
+                    ticker=ticker, company=issuer_name[:28],
+                    action="BUY (Insider)", value_usd_m=0,
+                    date=date, source="SEC Form 4",
+                ))
+                if len(trades) >= 10:
+                    break
+                time.sleep(0.1)
+            except Exception:
+                continue
     except Exception as e:
-        print(f"[OpenInsider] {e}")
-    return trades
+        print(f"  [Form 4] {e}")
+
+    return trades[:12]
 
 
 def get_dataroma_trades() -> List[WhaleTrade]:
-    """Scrape Dataroma for recent superinvestor activity."""
-    url = "https://www.dataroma.com/m/activity.php"
+    """Dataroma superinvestor activity — recent buys/sells."""
     trades = []
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
+        r = requests.get("https://www.dataroma.com/m/activity.php",
+                         headers=WEB_HEADERS, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
-        for row in soup.select("table tr")[1:16]:
+        for row in soup.select("table tr")[1:20]:
             cells = [td.get_text(strip=True) for td in row.select("td")]
-            if len(cells) >= 5:
-                manager = cells[0]
-                ticker  = cells[1]
-                action  = cells[2]   # "Buy" / "Sell" / "Add" / "Reduce"
-                pct     = cells[3]   # % of portfolio
-                date    = cells[4]
-                a_clean = "BUY" if "Buy" in action or "Add" in action else ("SELL" if "Sell" in action or "Reduce" in action else action)
-                trades.append(WhaleTrade(
-                    whale=manager[:25], ticker=ticker, company=ticker,
-                    action=a_clean, value_usd_m=0,
-                    date=date, source="Dataroma/13F",
-                ))
+            if len(cells) < 4:
+                continue
+            manager = cells[0]
+            ticker  = re.sub(r"[^A-Z\.]","", cells[1].upper())[:5]
+            action  = cells[2]
+            date    = cells[4] if len(cells) > 4 else "—"
+            if not ticker:
+                continue
+            a = "BUY" if any(x in action for x in ("Buy","Add")) else ("SELL" if any(x in action for x in ("Sell","Reduce")) else action)
+            trades.append(WhaleTrade(
+                whale=manager[:25], ticker=ticker, company=ticker,
+                action=a, value_usd_m=0, date=date, source="Dataroma/13F",
+            ))
     except Exception as e:
-        print(f"[Dataroma] {e}")
-    return trades
+        print(f"  [Dataroma] {e}")
+    return trades[:12]
 
 
-# ── Enrich trades with quant scores ───────────────────────────────────────────
-
-def enrich_with_quant(trades: List[WhaleTrade], max_tickers: int = 20) -> List[WhaleTrade]:
-    """Add quant scores to whale trades. Rate-limited to avoid yfinance overload."""
-    seen = {}
-    for t in trades:
-        ticker = t.ticker.upper().strip()
-        if not ticker or ticker in ("—", "N/A", "") or len(ticker) > 6:
+def get_capitol_trades_as_whale() -> List[WhaleTrade]:
+    raw = fetch_capitol_trades(limit=20)
+    trades = []
+    for t in raw:
+        action = "BUY" if "Purchase" in t.get("action","") else ("SELL" if "Sale" in t.get("action","") else t.get("action","—"))
+        ticker = re.sub(r"[^A-Z]","", t.get("ticker","").upper())[:5]
+        if not ticker:
             continue
-        if ticker not in seen:
-            try:
-                seen[ticker] = _get_quant_for_ticker(ticker)
-                time.sleep(0.1)
-            except:
-                seen[ticker] = {"score": 0, "signal": "N/A", "tech": 0, "stat": 0, "ml": 0, "hurst": 0, "kz": 0}
-        q = seen[ticker]
-        t.quant_score  = q.get("score", 0)
-        t.quant_signal = q.get("signal", "N/A")
-        t.tech_score   = q.get("tech", 0)
-        t.stat_score   = q.get("stat", 0)
-        t.follow, t.follow_reason = _follow_signal(t.action, t.quant_signal, t.quant_score)
-
+        trades.append(WhaleTrade(
+            whale=t.get("politician","Congress")[:25],
+            ticker=ticker, company=t.get("company", ticker)[:25],
+            action=action, value_usd_m=0,
+            date=t.get("filed_date","—"), source="Capitol Trades",
+        ))
     return trades
 
 
 # ── Rich Tables ────────────────────────────────────────────────────────────────
 
 def render_trades_table(trades: List[WhaleTrade], title: str) -> Table:
-    """
-    Core table: what did smart money buy/sell + our quant verdict.
-    This is the table investors actually care about.
-    """
-    t = Table(
-        title=title,
-        box=box.ROUNDED, show_lines=True,
-        header_style="bold white on dark_blue",
-        min_width=200,
-    )
-    t.add_column("Whale / Fund",       width=26, no_wrap=True)
-    t.add_column("Ticker",             width=8,  style="bold")
-    t.add_column("Company",            width=22, no_wrap=True)
-    t.add_column("Action",             width=14, justify="center")
-    t.add_column("Size",               width=10, justify="right")
-    t.add_column("Period",             width=12)
-    t.add_column("Source",             width=14)
-    t.add_column("Quant",              width=7,  justify="right")
-    t.add_column("Tech",               width=6,  justify="right")
-    t.add_column("Stat",               width=6,  justify="right")
-    t.add_column("Quant Signal",       width=13, justify="center")
-    t.add_column("→ Follow?",          width=16, justify="center")
+    t = Table(title=title, box=box.ROUNDED, show_lines=True,
+              header_style="bold white on dark_blue", min_width=200)
+    t.add_column("Whale / Fund",    width=26, no_wrap=True)
+    t.add_column("Ticker",          width=8,  style="bold")
+    t.add_column("Company",         width=22, no_wrap=True)
+    t.add_column("Action",          width=14, justify="center")
+    t.add_column("Size",            width=10, justify="right")
+    t.add_column("Period",          width=12)
+    t.add_column("Source",          width=14)
+    t.add_column("Quant/100",       width=9,  justify="right")
+    t.add_column("Tech",            width=6,  justify="right")
+    t.add_column("Stat",            width=6,  justify="right")
+    t.add_column("Signal",          width=13, justify="center")
+    t.add_column("→ Follow?",       width=16, justify="center")
 
-    action_colors = {
-        "BUY":          "bold green",
-        "NEW":          "bold green",
-        "INCREASE":     "green",
-        "SELL":         "bold red",
-        "CLOSED":       "bold red",
-        "DECREASE":     "red",
-        "SHORT":        "bold red",
-        "HOLD/LONG":    "yellow",
-        "BUY (Insider)":"bold green",
-        "CALL":         "cyan",
-    }
-    follow_colors = {
-        "STRONG_FOLLOW": "bold green",
-        "FOLLOW":        "green",
-        "WATCH":         "yellow",
-        "CAUTION":       "orange1",
-        "AVOID":         "bold red",
-    }
-    follow_emoji = {
-        "STRONG_FOLLOW": "⭐⭐⭐ STRONG",
-        "FOLLOW":        "⭐⭐ FOLLOW",
-        "WATCH":         "👁 WATCH",
-        "CAUTION":       "⚠️ CAUTION",
-        "AVOID":         "❌ AVOID",
-    }
-    quant_colors = {"STRONG_BUY":"bold green","BUY":"green","HOLD":"yellow","SELL":"red","STRONG_SELL":"bold red","N/A":"dim"}
+    ac = {"BUY":"bold green","NEW":"bold green","INCREASE":"green","Purchase":"bold green",
+          "SELL":"bold red","CLOSED":"bold red","DECREASE":"red","Sale":"bold red",
+          "SHORT":"bold red","HOLD/LONG":"yellow","BUY (Insider)":"bold green","CALL":"cyan"}
+    fc = {"STRONG_FOLLOW":"bold green","FOLLOW":"green","WATCH":"yellow",
+          "CAUTION":"orange1","AVOID":"bold red"}
+    fe = {"STRONG_FOLLOW":"⭐⭐⭐ STRONG","FOLLOW":"⭐⭐ FOLLOW",
+          "WATCH":"👁 WATCH","CAUTION":"⚠️ CAUTION","AVOID":"❌ AVOID"}
+    qc = {"STRONG_BUY":"bold green","BUY":"green","HOLD":"yellow",
+          "SELL":"red","STRONG_SELL":"bold red","N/A":"dim"}
 
     for tr in trades:
-        ac  = action_colors.get(tr.action, "white")
-        fc  = follow_colors.get(tr.follow, "white")
-        qc  = quant_colors.get(tr.quant_signal, "dim")
-        size_str = f"${tr.value_usd_m:.0f}M" if tr.value_usd_m > 0 else "—"
-        qs_c = "green" if tr.quant_score>=60 else "yellow" if tr.quant_score>=45 else ("red" if tr.quant_score>0 else "dim")
-        ts_c = "green" if tr.tech_score>=60 else "yellow" if tr.tech_score>=45 else ("red" if tr.tech_score>0 else "dim")
-        st_c = "green" if tr.stat_score>=60 else "yellow" if tr.stat_score>=45 else ("red" if tr.stat_score>0 else "dim")
+        a_col = ac.get(tr.action, "white")
+        f_col = fc.get(tr.follow, "white")
+        q_col = qc.get(tr.quant_signal, "dim")
+        size  = f"${tr.value_usd_m:.0f}M" if tr.value_usd_m > 0 else "—"
+        q_s   = "green" if tr.quant_score>=60 else "yellow" if tr.quant_score>=45 else ("red" if tr.quant_score>0 else "dim")
+        t_s   = "green" if tr.tech_score>=60  else "yellow" if tr.tech_score>=45  else ("red" if tr.tech_score>0  else "dim")
+        s_s   = "green" if tr.stat_score>=60  else "yellow" if tr.stat_score>=45  else ("red" if tr.stat_score>0  else "dim")
 
+        sig_str = "—" if tr.quant_signal in ("N/A", "") else f"[{q_col}]{tr.quant_signal}[/{q_col}]"
         t.add_row(
-            tr.whale[:26],
-            tr.ticker,
-            tr.company[:22],
-            f"[{ac}]{tr.action}[/{ac}]",
-            size_str,
-            tr.date,
-            tr.source[:14],
-            f"[{qs_c}]{tr.quant_score:.0f}[/{qs_c}]" if tr.quant_score > 0 else "—",
-            f"[{ts_c}]{tr.tech_score:.0f}[/{ts_c}]" if tr.tech_score > 0 else "—",
-            f"[{st_c}]{tr.stat_score:.0f}[/{st_c}]" if tr.stat_score > 0 else "—",
-            f"[{qc}]{tr.quant_signal}[/{qc}]",
-            f"[{fc}]{follow_emoji.get(tr.follow, tr.follow)}[/{fc}]",
+            tr.whale[:26], tr.ticker, tr.company[:22],
+            f"[{a_col}]{tr.action}[/{a_col}]",
+            size, tr.date, tr.source[:14],
+            f"[{q_s}]{tr.quant_score:.0f}[/{q_s}]" if tr.quant_score>0 else "—",
+            f"[{t_s}]{tr.tech_score:.0f}[/{t_s}]"  if tr.tech_score>0  else "—",
+            f"[{s_s}]{tr.stat_score:.0f}[/{s_s}]"  if tr.stat_score>0  else "—",
+            sig_str,
+            f"[{f_col}]{fe.get(tr.follow, tr.follow)}[/{f_col}]",
         )
     return t
 
 
-def render_whale_card(entity: Dict, tab: str) -> str:
-    """One-line identity card for a whale — shown above their trades."""
-    name    = entity.get("name", "")
-    manager = entity.get("manager", "")
-    style   = entity.get("style", "")
-    known   = entity.get("known_for", "")[:80]
-    cik     = entity.get("cik", "")
-    source  = f"CIK {cik}" if cik else "News/On-chain"
-    return f"[bold]{name}[/bold] [{style}] | {manager} | {known} | Data: {source}"
+# Mega-caps everyone already knows — deprioritise in the "novel picks" summary
+_CONSENSUS_TICKERS = {
+    "AAPL","MSFT","GOOGL","GOOG","AMZN","META","TSLA","NVDA",
+    "BRK.B","BRK.A","JPM","V","UNH","XOM","JNJ","WMT","PG",
+}
+
+def _novelty_score(t: "WhaleTrade") -> float:
+    """Higher = more non-consensus. Penalise mega-caps, boost smaller funds."""
+    base = {"STRONG_FOLLOW": 3, "FOLLOW": 2, "WATCH": 1}.get(t.follow, 0) * 10
+    base += t.quant_score * 0.5
+    if t.ticker.upper() in _CONSENSUS_TICKERS:
+        base -= 20   # everyone knows AAPL — not novel
+    # Boost picks from less-followed / newer managers
+    novel_sources = {"D1 Capital","Sachem Head","Durable","Whale Rock",
+                     "Situational","Scion","Duquesne","Baupost"}
+    if any(ns in t.whale for ns in novel_sources):
+        base += 12
+    # Boost if value is small (concentrated conviction, not index-hugging)
+    if 0 < t.value_usd_m < 200:
+        base += 5
+    return base
 
 
 def render_follow_summary(all_trades: List[WhaleTrade]) -> Table:
     """
-    Top-level summary: the BEST follow opportunities today.
-    Strong Follow trades sorted by quant score.
+    Top follow opportunities — ranked by novelty + conviction, not just quant score.
+    Filters out generic mega-cap consensus picks.
     """
-    strong = [t for t in all_trades if t.follow in ("STRONG_FOLLOW", "FOLLOW") and t.ticker and t.ticker != "—"]
-    strong.sort(key=lambda x: x.quant_score, reverse=True)
+    actionable = [t for t in all_trades
+                  if t.follow in ("STRONG_FOLLOW","FOLLOW","WATCH")
+                  and t.ticker and len(t.ticker) >= 1]
+
+    # Per ticker: keep the trade with the best novelty score
+    best: Dict[str, WhaleTrade] = {}
+    for t in actionable:
+        k = t.ticker.upper()
+        if k not in best or _novelty_score(t) > _novelty_score(best[k]):
+            best[k] = t
+
+    ranked = sorted(best.values(), key=_novelty_score, reverse=True)[:15]
 
     t = Table(
-        title="🎯 TODAY'S BEST FOLLOW OPPORTUNITIES — Whale Signal + Quant Confirmed",
+        title="🎯 TOP FOLLOW OPPORTUNITIES — Novelty-ranked | Non-consensus picks first",
         box=box.HEAVY_EDGE, show_lines=True,
-        header_style="bold yellow on grey11",
-        min_width=200,
+        header_style="bold yellow on grey11", min_width=200,
     )
-    t.add_column("Priority",    justify="center", width=10)
-    t.add_column("Ticker",      style="bold",     width=8)
-    t.add_column("Company",                       width=22, no_wrap=True)
-    t.add_column("Whale",                         width=26, no_wrap=True)
-    t.add_column("Action",      justify="center", width=12)
-    t.add_column("Quant Score", justify="right",  width=11)
-    t.add_column("Tech/Stat",   justify="right",  width=10)
-    t.add_column("Quant Signal",justify="center", width=13)
-    t.add_column("Why Follow",                    width=50)
+    t.add_column("Rank",         justify="center", width=10)
+    t.add_column("Ticker",       style="bold",     width=8)
+    t.add_column("Company",                        width=22, no_wrap=True)
+    t.add_column("Whale",                          width=26, no_wrap=True)
+    t.add_column("Action",       justify="center", width=14)
+    t.add_column("Quant/100",    justify="right",  width=10)
+    t.add_column("Signal",       justify="center", width=13)
+    t.add_column("Consensus?",   justify="center", width=11)
+    t.add_column("Why Follow",                     width=50)
 
-    for i, tr in enumerate(strong[:12], 1):
-        priority = "⭐⭐⭐ #1" if i == 1 else (f"⭐⭐  #{i}" if i <= 3 else f"⭐    #{i}")
-        ac  = "bold green" if "BUY" in tr.action else "red"
-        qc  = "green" if tr.quant_score>=60 else "yellow"
-        qsc = {"STRONG_BUY":"bold green","BUY":"green","HOLD":"yellow","SELL":"red","N/A":"dim"}.get(tr.quant_signal,"white")
+    fc = {"STRONG_FOLLOW":"bold green","FOLLOW":"green","WATCH":"yellow"}
+    ac = {"BUY":"bold green","BUY (Insider)":"bold green","SELL":"red","HOLD/LONG":"yellow"}
+    qc = {"STRONG_BUY":"bold green","BUY":"green","HOLD":"yellow","SELL":"red","N/A":"dim"}
+
+    for i, tr in enumerate(ranked, 1):
+        is_consensus = tr.ticker.upper() in _CONSENSUS_TICKERS
+        pri_str = f"⭐⭐⭐ #{i}" if tr.follow=="STRONG_FOLLOW" else (f"⭐⭐  #{i}" if tr.follow=="FOLLOW" else f"⭐    #{i}")
+        pri_col = "bold green" if i<=3 else "green"
+        a_col = ac.get(tr.action, "white")
+        f_col = fc.get(tr.follow, "yellow")
+        q_col = qc.get(tr.quant_signal, "dim")
+        q_s   = "green" if tr.quant_score>=60 else "yellow" if tr.quant_score>=45 else "red"
+        sig_str = "—" if tr.quant_signal in ("N/A","") else f"[{q_col}]{tr.quant_signal}[/{q_col}]"
+        consensus_str = "[dim]👥 consensus[/dim]" if is_consensus else "[bold cyan]💡 non-obvious[/bold cyan]"
+
         t.add_row(
-            f"[{'bold green' if i<=3 else 'green'}]{priority}[/{'bold green' if i<=3 else 'green'}]",
+            f"[{pri_col}]{pri_str}[/{pri_col}]",
             tr.ticker, tr.company[:22], tr.whale[:26],
-            f"[{ac}]{tr.action}[/{ac}]",
-            f"[{qc}]{tr.quant_score:.0f}/100[/{qc}]",
-            f"T:{tr.tech_score:.0f}|S:{tr.stat_score:.0f}",
-            f"[{qsc}]{tr.quant_signal}[/{qsc}]",
+            f"[{a_col}]{tr.action}[/{a_col}]",
+            f"[{q_s}]{tr.quant_score:.0f}/100[/{q_s}]",
+            sig_str,
+            consensus_str,
             tr.follow_reason[:50],
         )
     return t
@@ -404,108 +442,220 @@ def render_follow_summary(all_trades: List[WhaleTrade]) -> Table:
 # ── Main Runner ────────────────────────────────────────────────────────────────
 
 def run_whale_tracker() -> str:
-    """Run all 6 tabs + extra sources. Return summary text for AI analysis."""
     all_trades: List[WhaleTrade] = []
     summary_lines = []
+    out = Console(width=220)
+    return _whale_tracker_body(out, all_trades, summary_lines)
 
-    console.rule("[bold yellow]🐋 WHALE TRACKER — Smart Money Intelligence[/bold yellow]")
 
-    # ── Tab 1 & 2: Institutional + AI Funds (13F + ARK) ──────────────────────
-    console.rule("[cyan]Tab 1 & 2: Institutional Holdings (SEC 13F + ARK Daily)[/cyan]")
+def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_lines: list) -> str:
+    out.rule("[bold yellow]🐋 WHALE TRACKER — Smart Money Intelligence[/bold yellow]")
+
+    # ── Tab 1 & 2: Institutional + AI Funds (13F + ARK + Dataroma) ───────────
+    out.rule("[cyan]Tab 1 & 2: Institutional + AI Funds[/cyan]")
 
     priority_13f = [
-        ("Berkshire Hathaway",    "0001067983"),  # Buffett
-        ("Scion Asset Mgmt",      "0001649978"),  # Burry
-        ("Duquesne Family Office","0001536411"),  # Druckenmiller
-        ("Appaloosa Management",  "0001006438"),  # Tepper
-        ("Pershing Square",       "0001477327"),  # Ackman
-        ("Viking Global",         "0001103804"),  # Halvorsen
-        ("Baupost Group",         "0001060349"),  # Klarman
-        ("Third Point LLC",       "0001040792"),  # Loeb
+        # Established legends
+        ("Berkshire Hathaway",    "0001067983"),
+        ("Scion Asset Mgmt",      "0001649978"),
+        ("Duquesne Family Office","0001536411"),
+        ("Pershing Square",       "0002026053"),  # correct CIK (old was wrong entity)
+        ("Viking Global",         "0001103804"),
+        ("Baupost Group",         "0001060349"),
+        ("Third Point LLC",       "0001040792"),
+        ("Citadel Advisors",      "0001423298"),
+        # AI / Tech focused
+        ("Situational Awareness", "0002045724"),  # Leopold Aschenbrenner — filed 2026-05-18
+        ("Coatue Management",     "0001336528"),
+        ("Tiger Global",          "0001167483"),
+        ("Dragoneer Investment",  "0001413754"),
+        # Younger / concentrated managers
+        ("D1 Capital Partners",   "0001747057"),
+        ("Sachem Head Capital",   "0001582090"),
+        ("Durable Capital",       "0001798849"),
+        ("Whale Rock Capital",    "0001387322"),
     ]
 
-    tab12_trades = []
+    tab12: List[WhaleTrade] = []
     for name, cik in priority_13f:
-        console.print(f"  [dim]→ Fetching 13F: {name}...[/dim]")
-        trades = get_13f_trades(name, cik)
-        tab12_trades.extend(trades)
-        time.sleep(0.3)
+        out.print(f"  [dim]→ Fetching 13F: {name}...[/dim]")
+        tab12.extend(get_13f_trades(name, cik))
+        time.sleep(0.2)
 
-    # ARK daily
-    console.print("  [dim]→ Fetching ARK daily holdings...[/dim]")
-    tab12_trades.extend(get_ark_trades("ARKK"))
+    out.print("  [dim]→ ARK daily...[/dim]")
+    tab12.extend(get_ark_trades("ARKK"))
 
-    # Dataroma superinvestors
-    console.print("  [dim]→ Fetching Dataroma superinvestors...[/dim]")
-    dataroma = get_dataroma_trades()
-    tab12_trades.extend(dataroma[:10])
+    out.print("  [dim]→ Dataroma superinvestors...[/dim]")
+    tab12.extend(get_dataroma_trades())
 
-    if tab12_trades:
-        console.print("  [dim]→ Running quant analysis on tickers...[/dim]")
-        tab12_trades = enrich_with_quant(tab12_trades)
-        all_trades.extend(tab12_trades)
-        console.print(render_trades_table(tab12_trades[:20], "🏦 Institutional + AI Funds — Recent Positions"))
-        console.print()
+    out.print("  [dim]→ Running quant analysis...[/dim]")
+    tab12 = enrich_with_quant(tab12)
+    all_trades.extend(tab12)
+
+    # Show top 20 from institutional tab (deduplicated within this tab)
+    tab12_deduped = list(deduplicate(tab12))[:20]
+    if tab12_deduped:
+        out.print(render_trades_table(tab12_deduped, "🏦 Institutional + AI Funds — Top Positions with Quant Signal"))
+        out.print()
 
     # ── Tab 3: Asia Whales ────────────────────────────────────────────────────
-    console.rule("[cyan]Tab 3: Asia Whales[/cyan]")
-    console.print("  [dim]Note: Hillhouse 13F covers US-listed holdings only. SoftBank via news.[/dim]\n")
-    asia_trades = get_13f_trades("Hillhouse Capital", "0001709283")
-    if asia_trades:
-        asia_trades = enrich_with_quant(asia_trades)
-        all_trades.extend(asia_trades)
-        console.print(render_trades_table(asia_trades[:10], "🐉 Asia Whales — US Holdings"))
-        console.print()
+    out.rule("[cyan]Tab 3: Asia Whales[/cyan]")
+    out.print("  [dim]→ Hillhouse stopped US 13F filings in 2021. Trying historical filings...[/dim]")
+    asia: List[WhaleTrade] = []
+    for name, cik in [("Hillhouse Capital","0001762304"),("DST Global","0001548144"),
+                      ("SoftBank Vision Fund","0001640251"),("GIC Singapore","0001641614")]:
+        out.print(f"  [dim]→ {name}...[/dim]")
+        trades = get_13f_trades(name, cik)
+        if trades:
+            asia.extend(trades)
+        else:
+            out.print(f"  [dim yellow]  ↳ No active 13F for {name} (foreign sovereign/private fund)[/dim yellow]")
+        time.sleep(0.2)
+    if asia:
+        asia = enrich_with_quant(asia)
+        all_trades.extend(asia)
+        out.print(render_trades_table(list(deduplicate(asia))[:10], "🐉 Asia Whales — US Holdings (13F)"))
+    else:
+        out.print("  [yellow]Asia whales (Hillhouse/SoftBank/GIC) do not file US 13F or filings are historical only.[/yellow]")
+        out.print("  [dim]→ Track via: Bloomberg/Reuters news, SoftBank quarterly reports, GIC annual report.[/dim]")
+    out.print()
 
     # ── Tab 4: Crypto Whales ──────────────────────────────────────────────────
-    console.rule("[cyan]Tab 4: Crypto Whales[/cyan]")
-    crypto_trades = []
-    # Known crypto/BTC-adjacent public companies as proxy
-    for ticker, whale, action, size in [
-        ("MSTR", "Michael Saylor/MSTR", "BUY", 2000),
-        ("COIN", "a16z Crypto (via holdings)", "HOLD/LONG", 800),
-        ("IBIT", "World Liberty Fin (BTC proxy)", "BUY", 500),
-    ]:
-        crypto_trades.append(WhaleTrade(
-            whale=whale, ticker=ticker, company=ticker,
-            action=action, value_usd_m=size,
-            date="Recent", source="Public Disclosure",
+    out.rule("[cyan]Tab 4: Crypto Whales[/cyan]")
+    crypto: List[WhaleTrade] = [
+        WhaleTrade("Michael Saylor/MSTR",          "MSTR", "MicroStrategy",    "BUY",       2000, "Recent", "Public Disclosure"),
+        WhaleTrade("World Liberty Fin (Trump/WLF)", "IBIT", "iShares BTC ETF",  "BUY",        500, "Recent", "Public Disclosure"),
+        WhaleTrade("a16z Crypto (holdings proxy)",  "COIN", "Coinbase",          "HOLD/LONG",  800, "Recent", "Public Disclosure"),
+        WhaleTrade("Pantera Capital",               "MSTR", "BTC proxy",         "BUY",        200, "Recent", "News"),
+        WhaleTrade("Galaxy Digital (Novogratz)",    "MSTR", "BTC proxy",         "BUY",        150, "Recent", "News"),
+    ]
+    crypto = enrich_with_quant(crypto)
+    all_trades.extend(crypto)
+    out.print(render_trades_table(list(deduplicate(crypto)), "🐋 Crypto Whales — Public + Proxy Positions"))
+    out.print()
+
+    # ── Tab 5: Insider Buying (Finviz — verified structure) ──────────────────
+    out.rule("[cyan]Tab 5: Insider Buying[/cyan]")
+    out.print("  [dim]→ Fetching insider buys via Finviz...[/dim]")
+    insider_raw = fetch_finviz_insiders(limit=15)
+    insider: List[WhaleTrade] = []
+    for row in insider_raw:
+        ticker = row["ticker"]
+        insider.append(WhaleTrade(
+            whale=f"Insider: {row['insider']} ({row['role'][:12]})",
+            ticker=ticker, company=ticker,
+            action="BUY (Insider)", value_usd_m=0,
+            date=row["date"], source="Finviz Insider",
         ))
-    crypto_trades = enrich_with_quant(crypto_trades)
-    all_trades.extend(crypto_trades)
-    console.print(render_trades_table(crypto_trades, "🐋 Crypto Whales — Public Positions (Proxy Tickers)"))
-    console.print()
+    if insider:
+        insider = enrich_with_quant(insider)
+        all_trades.extend(insider)
+        out.print(render_trades_table(list(deduplicate(insider))[:12],
+                                      "⚡ Insider Buying — C-Suite & Directors (Finviz)"))
+    else:
+        out.print("  [dim]No insider buy data today.[/dim]")
+    out.print()
 
-    # ── Tab 5: Market Makers ──────────────────────────────────────────────────
-    console.rule("[cyan]Tab 5: Market Makers + Insider Buying[/cyan]")
-    console.print("  [dim]→ Fetching OpenInsider Form 4 (insider buying)...[/dim]")
-    insider_trades = get_openinsider_trades()
-    if insider_trades:
-        insider_trades = enrich_with_quant(insider_trades)
-        all_trades.extend(insider_trades)
-        console.print(render_trades_table(insider_trades[:12], "⚡ Insider Buying — Form 4 (Last 14 Days)"))
-    console.print()
+    # ── Tab 6: Congressional Trades (QuiverQuant — real tickers, clean API) ──
+    out.rule("[cyan]Tab 6: Political Money — STOCK Act[/cyan]")
+    out.print("  [dim]→ Fetching Congressional trades via QuiverQuant...[/dim]")
+    congress_raw = fetch_quiverquant_congress(limit=20)
+    political: List[WhaleTrade] = []
+    for row in congress_raw:
+        political.append(WhaleTrade(
+            whale=row["politician"], ticker=row["ticker"],
+            company=row["ticker"], action=row["action"],
+            value_usd_m=0, date=row["filed_date"], source="QuiverQuant",
+        ))
+    if political:
+        political = enrich_with_quant(political)
+        all_trades.extend(political)
+        out.print(render_trades_table(list(deduplicate(political))[:15],
+                                      "🏛️ Congressional Trades — STOCK Act (QuiverQuant)"))
+    else:
+        out.print("  [dim]No congressional trade data today.[/dim]")
+    out.print()
 
-    # ── Tab 6: Political Money ────────────────────────────────────────────────
-    console.rule("[cyan]Tab 6: Political Money (STOCK Act Disclosures)[/cyan]")
-    console.print("  [dim]→ Fetching Congressional trades...[/dim]")
-    political_trades = get_capitol_trades_as_whale()
-    if political_trades:
-        political_trades = enrich_with_quant(political_trades)
-        all_trades.extend(political_trades)
-        console.print(render_trades_table(political_trades[:15], "🏛️ Congressional Trades — STOCK Act Disclosures"))
-    console.print()
+    # ── Tab 7: Social & Market Intelligence ──────────────────────────────────
+    out.rule("[cyan]Tab 7: Social & Market Intelligence[/cyan]")
 
-    # ── SUMMARY: Best Follow Opportunities ───────────────────────────────────
-    console.rule("[bold yellow]🎯 TOP FOLLOW OPPORTUNITIES — Today's Best Signals[/bold yellow]")
-    if all_trades:
-        console.print(render_follow_summary(all_trades))
+    # 7a. StockTwits trending
+    out.print("  [dim]→ StockTwits trending tickers...[/dim]")
+    trending = fetch_stocktwits_trending()
+    if trending:
+        from rich.panel import Panel
+        out.print(Panel(
+            "  ".join(f"[bold cyan]{t}[/bold cyan]" for t in trending[:12]),
+            title="📱 StockTwits Trending Now", border_style="cyan", expand=False,
+        ))
+    out.print()
 
-    # Build AI context
-    buys  = [t for t in all_trades if "BUY" in t.action and t.follow in ("STRONG_FOLLOW","FOLLOW")]
-    sells = [t for t in all_trades if "SELL" in t.action]
-    summary_lines.append(f"WHALE TRACKER: {len(all_trades)} trades tracked today")
-    summary_lines.append(f"Buy signals: " + ", ".join([f"{t.ticker}({t.whale[:15]})" for t in buys[:8]]))
-    summary_lines.append(f"Sell signals: " + ", ".join([f"{t.ticker}({t.whale[:15]})" for t in sells[:5]]))
+    # 7b. StockTwits sentiment on current whale holdings
+    whale_tickers = list({t.ticker for t in all_trades
+                          if t.ticker and len(t.ticker) <= 5 and t.follow in ("STRONG_FOLLOW","FOLLOW")})[:10]
+    if whale_tickers:
+        out.print(f"  [dim]→ Social sentiment for whale holdings: {', '.join(whale_tickers[:6])}...[/dim]")
+        sentiment = fetch_stocktwits_sentiment(whale_tickers)
+        if sentiment:
+            from rich.table import Table as RTable
+            st = RTable(title="📊 StockTwits Sentiment — On Current Whale Holdings",
+                        box=box.ROUNDED, show_lines=True, min_width=60)
+            st.add_column("Ticker",    style="bold", width=8)
+            st.add_column("Sentiment", justify="center", width=12)
+            st.add_column("🐂 Bull%",  justify="right", width=10)
+            st.add_column("Msgs",      justify="right", width=8)
+            for tkr, s in sorted(sentiment.items(), key=lambda x: x[1]["bull_pct"], reverse=True):
+                sc = "bold green" if s["sentiment"]=="Bullish" else ("red" if s["sentiment"]=="Bearish" else "yellow")
+                bp = s["bull_pct"]
+                bar = "█" * (bp // 10) + "░" * (10 - bp // 10)
+                st.add_row(tkr, f"[{sc}]{s['sentiment']}[/{sc}]",
+                           f"[{sc}]{bp}%[/{sc}] {bar}", str(s["count"]))
+            out.print(st)
+    out.print()
+
+    # 7c. Whale news mentions (Finviz headline scan)
+    out.print("  [dim]→ Scanning news for whale activity mentions...[/dim]")
+    news = fetch_whale_news()
+    if news:
+        from rich.table import Table as NTable
+        nt = NTable(title="📰 Whale News Mentions — Finviz Headlines",
+                    box=box.SIMPLE, show_lines=False, min_width=160)
+        nt.add_column("Whale",    width=30, no_wrap=True)
+        nt.add_column("Headline", width=120)
+        nt.add_column("Date",     width=10)
+        for n in news:
+            nt.add_row(f"[cyan]{n['whale']}[/cyan]", n["headline"], n["date"])
+        out.print(nt)
+    else:
+        out.print("  [dim]No whale mentions in current news cycle.[/dim]")
+    out.print()
+
+    # 7d. SEC 13F filing alerts (new filings in last 24h)
+    out.print("  [dim]→ SEC EDGAR 13F filing alerts...[/dim]")
+    alerts = fetch_sec_13f_alerts()
+    if alerts:
+        from rich.table import Table as ATable
+        at = ATable(title="🔔 New SEC 13F Filings — Fresh From EDGAR",
+                    box=box.SIMPLE, show_lines=False, min_width=80)
+        at.add_column("Filed",   width=12)
+        at.add_column("Entity",  width=45)
+        at.add_column("CIK",     width=12)
+        for a in alerts[:10]:
+            at.add_row(a["date"], f"[white]{a['name']}[/white]", a["cik"])
+        out.print(at)
+    out.print()
+
+    # ── Top Follow Opportunities (deduplicated across ALL tabs) ───────────────
+    out.rule("[bold yellow]🎯 BEST FOLLOW OPPORTUNITIES[/bold yellow]")
+    out.print(render_follow_summary(all_trades))
+    out.print()
+    out.print("[dim]Scroll: output auto-paged via less -R when running in a terminal.[/dim]")
+
+    # Build summary for AI analysis
+    strong = [t for t in all_trades if t.follow == "STRONG_FOLLOW"]
+    follow = [t for t in all_trades if t.follow == "FOLLOW"]
+    summary_lines.append(f"WHALE TRACKER: {len(all_trades)} raw signals, {len(set(t.ticker for t in all_trades))} unique tickers")
+    summary_lines.append("Strong Follow: " + ", ".join(f"{t.ticker}({t.whale[:12]})" for t in strong[:6]))
+    summary_lines.append("Follow: " + ", ".join(f"{t.ticker}({t.whale[:12]})" for t in follow[:6]))
 
     return "\n".join(summary_lines)
