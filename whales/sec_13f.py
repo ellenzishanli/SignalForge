@@ -231,16 +231,49 @@ def fetch_capitol_trades(limit: int = 20) -> List[Dict]:
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
 
-        for row in soup.select("table tbody tr")[:limit]:
-            cells = [td.get_text(strip=True) for td in row.select("td")]
-            if len(cells) >= 6:
+        # Capitol Trades uses data attributes and specific class names
+        for row in soup.select("tr.q-tr")[:limit]:
+            try:
+                politician = row.select_one("[data-label='Politician']")
+                ticker_el  = row.select_one("[data-label='Ticker'], .q-field--ticker, td:nth-child(3)")
+                action_el  = row.select_one("[data-label='Type'], td:nth-child(5)")
+                amount_el  = row.select_one("[data-label='Amount'], td:nth-child(6)")
+                date_el    = row.select_one("[data-label='Filed'], td:nth-child(7)")
+
+                ticker = ticker_el.get_text(strip=True) if ticker_el else ""
+                # Only keep valid tickers (1-5 uppercase letters)
+                import re
+                ticker = re.sub(r'[^A-Z]', '', ticker.upper())[:5]
+                if not ticker or len(ticker) < 1:
+                    continue
+
                 trades.append({
-                    "politician": cells[0],
-                    "ticker":     cells[2],
-                    "action":     cells[3],   # Purchase / Sale
-                    "amount":     cells[4],
-                    "filed_date": cells[5],
+                    "politician": politician.get_text(strip=True)[:30] if politician else "—",
+                    "ticker":     ticker,
+                    "action":     action_el.get_text(strip=True) if action_el else "—",
+                    "amount":     amount_el.get_text(strip=True) if amount_el else "—",
+                    "filed_date": date_el.get_text(strip=True) if date_el else "—",
                 })
+            except Exception:
+                continue
+
+        # Fallback: try senate stock watcher API
+        if not trades:
+            api_url = "https://senate-stock-watcher-data.s3-us-gov-west-1.amazonaws.com/aggregate/all_transactions_for_senator.json"
+            rj = requests.get(api_url, timeout=8)
+            data = rj.json()
+            for senator_data in list(data.values())[:5]:
+                for tx in senator_data[:4]:
+                    ticker = tx.get("ticker", "").strip().upper()
+                    if ticker and ticker != "--":
+                        trades.append({
+                            "politician": tx.get("senator", "Senator"),
+                            "ticker":     ticker,
+                            "action":     tx.get("type", "—"),
+                            "amount":     tx.get("amount", "—"),
+                            "filed_date": tx.get("transaction_date", "—"),
+                        })
+
     except Exception as e:
         print(f"[Capitol] Error: {e}")
-    return trades
+    return trades[:limit]

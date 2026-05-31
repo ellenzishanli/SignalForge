@@ -1,299 +1,104 @@
 """
 Whale Registry — Smart Money Tracker
-25+ institutions, funds, individuals, and market makers to follow.
-
-Data sources:
-  - SEC EDGAR 13F (free, quarterly): US institutional holdings >$100M AUM
-  - Etherscan API (free tier): on-chain wallet tracking
-  - Capitol Trades (free scrape): politician stock trades
-  - News/RSS: for market makers and non-US entities
+Organized by tab. Each entity has a CIK (for 13F), Form 4, or other data source.
 """
 
-# ── Tab 1: Top Institutional Investors (SEC 13F) ──────────────────────────────
+# ── Tab 1: Top US Institutional Investors ─────────────────────────────────────
 INSTITUTIONAL = [
-    {
-        "name": "Berkshire Hathaway",
-        "manager": "Warren Buffett",
-        "cik": "0001067983",
-        "style": "Value / Long-only",
-        "known_for": "Long-term concentrated bets. Apple was 40%+ of portfolio. Never does tech until he does.",
-        "signal_logic": "New position = strong conviction buy. Trimming = valuation concern.",
-        "twitter": None,
-    },
-    {
-        "name": "Scion Asset Management",
-        "manager": "Michael Burry",
-        "cik": "0001649978",
-        "style": "Contrarian / Deep value",
-        "known_for": "Predicted 2008 crisis. Concentrated shorts. Often early (painfully so).",
-        "signal_logic": "New short (put options) = watch for systemic risk. New long = deep value opportunity.",
-        "twitter": "@michaeljburry",
-    },
-    {
-        "name": "Duquesne Family Office",
-        "manager": "Stanley Druckenmiller",
-        "cik": "0001536411",
-        "style": "Global macro / Growth",
-        "known_for": "30+ years without a losing year. Follows earnings momentum. Fast mover.",
-        "signal_logic": "New position = near-term earnings catalyst. Quick rotation = macro regime change signal.",
-        "twitter": None,
-    },
-    {
-        "name": "Pershing Square Capital",
-        "manager": "Bill Ackman",
-        "cik": "0001336528",
-        "style": "Activist / Concentrated",
-        "known_for": "Loud, concentrated, activist. Herbalife short, Chipotle/Universal long.",
-        "signal_logic": "Public announcement = confirmed position. Activist letter = major catalyst incoming.",
-        "twitter": "@billackman",
-    },
-    {
-        "name": "Appaloosa Management",
-        "manager": "David Tepper",
-        "cik": "0001006438",
-        "style": "Distressed / Event-driven",
-        "known_for": "Bought bank stocks at bottom in 2009. Risk-on/risk-off macro calls.",
-        "signal_logic": "'I'm buying' public statement historically moves markets. Watch his CNBC appearances.",
-        "twitter": None,
-    },
-    {
-        "name": "Third Point LLC",
-        "manager": "Dan Loeb",
-        "cik": "0001040792",
-        "style": "Activist / Tech-focused",
-        "known_for": "Activist in Disney, Sony, Sotheby's. Strong tech picks (Amazon early).",
-        "signal_logic": "New tech position = high conviction growth bet. Activist letter = proxy fight risk/reward.",
-        "twitter": None,
-    },
+    {"name": "Berkshire Hathaway",    "manager": "Warren Buffett",        "cik": "0001067983", "style": "Value/Long-only",          "known_for": "Apple, OXY, AMEX, BofA. Never shorts. Long-term."},
+    {"name": "Scion Asset Mgmt",      "manager": "Michael Burry",         "cik": "0001649978", "style": "Contrarian/Short",         "known_for": "Predicted 2008. Concentrated shorts via puts. Often early."},
+    {"name": "Duquesne Family Office","manager": "Stanley Druckenmiller",  "cik": "0001536411", "style": "Global Macro/Growth",      "known_for": "30yr no losing year. Follows earnings momentum hard."},
+    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0001336528", "style": "Activist/Concentrated",    "known_for": "Chipotle, Universal Music. Loud public announcements."},
+    {"name": "Appaloosa Management",  "manager": "David Tepper",          "cik": "0001006438", "style": "Distressed/Event",         "known_for": "Bought banks in 2009 bottom. Risk-on/off caller."},
+    {"name": "Third Point LLC",       "manager": "Dan Loeb",              "cik": "0001040792", "style": "Activist/Tech",            "known_for": "Disney, Sony activist. Strong tech + event-driven."},
+    {"name": "Citadel Advisors",      "manager": "Ken Griffin",           "cik": "0001423298", "style": "Multi-strategy/HFT",       "known_for": "Largest HF by revenue. Massive options flow."},
+    {"name": "Millennium Management", "manager": "Israel Englander",      "cik": "0001273931", "style": "Multi-strategy/Quant",     "known_for": "700+ portfolio managers. Quant + fundamental."},
+    {"name": "Point72 Asset Mgmt",    "manager": "Steve Cohen",           "cik": "0001603466", "style": "Multi-strategy",          "known_for": "Former SAC Capital. Strong equity L/S."},
+    {"name": "Baupost Group",         "manager": "Seth Klarman",          "cik": "0001060349", "style": "Value/Distressed",        "known_for": "Margin of Safety author. Deep value, patient."},
+    {"name": "Elliott Management",    "manager": "Paul Singer",           "cik": "0001048268", "style": "Activist/Distressed",     "known_for": "Aggressive activist. Argentina bonds. Tech activist."},
+    {"name": "Viking Global",         "manager": "Andreas Halvorsen",     "cik": "0001103804", "style": "L/S Equity/Tiger Cub",   "known_for": "Tiger Cub. Strong tech + healthcare picks."},
 ]
 
-# ── Tab 2: AI / Tech Focused Funds ───────────────────────────────────────────
+# ── Tab 2: AI / Tech Focused Funds ────────────────────────────────────────────
 AI_FUNDS = [
-    {
-        "name": "Situational Awareness LP",
-        "manager": "Leopold Aschenbrenner",
-        "cik": None,  # New fund — check SEC EDGAR for latest CIK
-        "style": "AI infrastructure / Energy thesis",
-        "known_for": (
-            "Q1 2026: $13.67B disclosed. Thesis: AI bottleneck is ENERGY & DATA CENTERS, not chips. "
-            "Long BTC miners (IREN, Core Scientific, RIOT) as cheap compute/energy plays. "
-            "Short NVDA via $7.46B puts — controversial but internally consistent thesis."
-        ),
-        "signal_logic": "Monitor 13F quarterly. Long miners = energy scarcity bet. NVDA puts = AI capex peak signal.",
-        "sec_search": "Situational Awareness",  # search term for EDGAR
-        "twitter": "@leopoldasch",
-    },
-    {
-        "name": "ARK Investment Management",
-        "manager": "Cathie Wood",
-        "cik": "0001579982",
-        "style": "Disruptive innovation / High conviction",
-        "known_for": "TSLA early, COIN early. High volatility. Daily transparency (publishes trades every day).",
-        "signal_logic": "ARK publishes ALL trades daily at ark-funds.com — real-time signal, no 13F lag.",
-        "data_url": "https://ark-funds.com/funds/arkk/",
-        "twitter": "@cathiedwood",
-    },
-    {
-        "name": "Coatue Management",
-        "manager": "Philippe Laffont",
-        "cik": "0001336528",
-        "style": "Tech-focused long/short",
-        "known_for": "Tiger Cub. Early in Alibaba, Snap, Lyft. Strong China tech exposure historically.",
-        "signal_logic": "New position = strong revenue growth signal. Rotation = sector momentum shift.",
-        "twitter": None,
-    },
-    {
-        "name": "Tiger Global Management",
-        "manager": "Chase Coleman",
-        "cik": "0001167483",
-        "style": "Growth / Global tech",
-        "known_for": "Tiger Cub. Massive VC + public portfolio. Early in Facebook, LinkedIn, Spotify.",
-        "signal_logic": "Public equity moves often follow private market thesis. Watch for VC → public cross.",
-        "twitter": None,
-    },
-    {
-        "name": "Andreessen Horowitz (a16z)",
-        "manager": "Marc Andreessen / Ben Horowitz",
-        "cik": "0001569190",
-        "style": "VC + crypto",
-        "known_for": "Largest crypto VC. Coinbase, OpenSea, Solana early. a16z crypto fund >$7B.",
-        "signal_logic": "a16z portfolio companies filing S-1 = IPO watch. Their crypto token unlocks = sell pressure.",
-        "twitter": "@a16z",
-    },
+    {"name": "Situational Awareness LP","manager": "Leopold Aschenbrenner","cik": None,         "style": "AI Infrastructure",       "known_for": "Q1'26 $13.67B. Long BTC miners (energy=AI bottleneck). Short NVDA $7.46B puts."},
+    {"name": "ARK Investment Mgmt",    "manager": "Cathie Wood",           "cik": "0001579982", "style": "Disruptive Innovation",   "known_for": "TSLA early, COIN early. Publishes ALL trades DAILY."},
+    {"name": "Coatue Management",      "manager": "Philippe Laffont",      "cik": "0001336528", "style": "Tech L/S / Tiger Cub",   "known_for": "Alibaba early, Snap, Lyft. Strong China tech."},
+    {"name": "Tiger Global",           "manager": "Chase Coleman",         "cik": "0001167483", "style": "Growth / Global Tech",   "known_for": "Facebook, LinkedIn, Spotify early. VC + public."},
+    {"name": "a16z (Andreessen)",      "manager": "Marc Andreessen",       "cik": "0001569190", "style": "VC / Crypto",            "known_for": "Coinbase, OpenSea, Solana. $7B+ crypto fund."},
+    {"name": "Founders Fund",          "manager": "Peter Thiel",           "cik": None,         "style": "VC / Contrarian",        "known_for": "SpaceX, Palantir, Anduril. Anti-consensus."},
+    {"name": "Sequoia Capital",        "manager": "Roelof Botha",          "cik": "0001783398", "style": "VC / Global",            "known_for": "Apple, Google, OpenAI, Stripe early."},
+    {"name": "General Catalyst",       "manager": "Hemant Taneja",         "cik": None,         "style": "VC / AI Health",         "known_for": "Stripe, Airbnb, Warby Parker. Big on AI+healthcare."},
+    {"name": "Dragoneer Investment",   "manager": "Marc Stad",             "cik": "0001413754", "style": "Growth / SaaS",          "known_for": "Snowflake, Nubank, Roblox early backer."},
 ]
 
 # ── Tab 3: Asia Whales ────────────────────────────────────────────────────────
 ASIA_WHALES = [
-    {
-        "name": "Hillhouse Capital",
-        "manager": "Zhang Lei (张磊)",
-        "cik": "0001709283",  # US-listed holdings via 13F
-        "style": "Long-term / China + Global",
-        "known_for": "China's best long-term investor. Early in JD.com, Meituan, CATL. Yale endowment style.",
-        "signal_logic": "New US position = conviction China tech recovery or global sector bet.",
-        "twitter": None,
-    },
-    {
-        "name": "SoftBank Vision Fund",
-        "manager": "Masayoshi Son",
-        "cik": "0001640251",
-        "style": "Tech / AI moonshots",
-        "known_for": "Arm, Alibaba, WeWork (bad). Now pivoting to AI — $100B+ committed to OpenAI ecosystem.",
-        "signal_logic": "SoftBank backing = massive capital injection incoming. Also sentiment indicator for AI hype cycle.",
-        "twitter": None,
-    },
-    {
-        "name": "GIC (Singapore Sovereign Fund)",
-        "manager": "GIC Private Limited",
-        "cik": "0001641614",
-        "style": "Sovereign wealth / Long horizon",
-        "known_for": "$770B+ AUM. Patient capital. Strong in infrastructure, PE, real assets.",
-        "signal_logic": "Quiet accumulator — new disclosed position signals multi-year conviction.",
-        "twitter": None,
-    },
-    {
-        "name": "Temasek Holdings",
-        "manager": "Singapore Government",
-        "cik": None,
-        "style": "Sovereign wealth / Asia-focused",
-        "known_for": "$300B+ AUM. Strong in SE Asia tech (Grab, GoTo). Also ByteDance, Alibaba exposure.",
-        "signal_logic": "Watch annual report and news — less frequent disclosures. Focus on new sector bets.",
-        "twitter": None,
-    },
+    {"name": "Hillhouse Capital",      "manager": "Zhang Lei (张磊)",      "cik": "0001709283", "style": "Long-term / China+Global","known_for": "JD.com, Meituan, CATL early. Yale endowment style."},
+    {"name": "SoftBank Vision Fund",   "manager": "Masayoshi Son",         "cik": "0001640251", "style": "Tech Moonshots",          "known_for": "Arm, Alibaba. Now: $100B+ OpenAI ecosystem bets."},
+    {"name": "GIC Singapore",          "manager": "GIC Private Ltd",       "cik": "0001641614", "style": "Sovereign Wealth",        "known_for": "$770B+ AUM. Patient capital. Infrastructure focus."},
+    {"name": "Temasek Holdings",       "manager": "Singapore Govt",        "cik": None,         "style": "Sovereign Wealth",        "known_for": "$300B AUM. Grab, GoTo, ByteDance, Alibaba exposure."},
+    {"name": "CIC (China Inv Corp)",   "manager": "Peng Chun",             "cik": None,         "style": "Sovereign Wealth",        "known_for": "$1.3T AUM. China's sovereign fund. US property + PE."},
+    {"name": "Alibaba / DAMO",         "manager": "Jack Ma / AI Team",     "cik": None,         "style": "Strategic / AI",          "known_for": "Investing in AI startups globally. Ant Group."},
+    {"name": "DST Global",             "manager": "Yuri Milner",           "cik": "0001548144", "style": "Growth / Global Tech",   "known_for": "Facebook $200M (10x). Twitter, Airbnb, Spotify early."},
+    {"name": "Keystone Capital (HK)",  "manager": "Various HK Family Ofc", "cik": None,         "style": "Family Office",           "known_for": "Tracks HK ultra-HNW. Bellwether for Asia flow."},
 ]
 
 # ── Tab 4: Crypto Whales ──────────────────────────────────────────────────────
 CRYPTO_WHALES = [
-    {
-        "name": "Justin Sun (孙宇晨)",
-        "handle": "justinsuntron",
-        "type": "individual",
-        "known_for": "TRON founder. Massive BTC, ETH, TRX whale. Buys attention as strategy (Warhol dinner etc.).",
-        "wallets": {
-            "eth": "0x3DdfA8eC3052539b6C9549F12cEA2C295cfF5296",
-            "tron": "TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9",
-        },
-        "signal_logic": "On-chain large buy = he's accumulating before announcement. Watch Binance large withdrawals.",
-        "twitter": "@justinsuntron",
-    },
-    {
-        "name": "World Liberty Financial (Trump Family)",
-        "handle": "worldlibertyfi",
-        "type": "political/crypto",
-        "known_for": (
-            "Trump family crypto project. Token sales generated ~$1.55B, family net gain ~$660M. "
-            "USD1 stablecoin, BTC reserve advocacy. Their holdings = US crypto policy barometer."
-        ),
-        "wallets": {
-            "eth": "0x5BE9F6776Dc3B3D6b90b71d3c6f5b5a2e5C9A4b",  # approximate — verify on-chain
-        },
-        "signal_logic": (
-            "Trump family buying crypto = pro-crypto regulation coming. "
-            "Their policy positions (BTC reserve, stablecoin bills) directly benefit their holdings."
-        ),
-        "twitter": "@worldlibertyfi",
-    },
-    {
-        "name": "a16z Crypto",
-        "handle": "a16zcrypto",
-        "type": "institutional crypto",
-        "known_for": "Largest crypto VC. Solana, Coinbase, Uniswap early. $7.6B AUM across 4 crypto funds.",
-        "wallets": {},  # holdings via SEC Form D and portfolio announcements
-        "signal_logic": "New investment announcement = token price catalyst. Token unlock schedules = sell pressure.",
-        "twitter": "@a16zcrypto",
-    },
-    {
-        "name": "Michael Saylor / MicroStrategy",
-        "handle": "saylormstr",
-        "type": "institutional BTC",
-        "known_for": "560,000+ BTC held (~$58B). Leveraged BTC bet using debt. Corporate BTC treasury pioneer.",
-        "wallets": {},
-        "signal_logic": "MSTR buying announcement = BTC near-term bullish. MSTR premium/discount to BTC NAV = sentiment gauge.",
-        "twitter": "@saylor",
-    },
+    {"name": "Justin Sun (孙宇晨)",    "manager": "self",   "type": "individual",        "wallets_eth": "0x3DdfA8eC3052539b6C9549F12cEA2C295cfF5296", "known_for": "TRON founder. Massive BTC/ETH. Buys attention intentionally.", "twitter": "@justinsuntron"},
+    {"name": "World Liberty Financial","manager": "Trump",  "type": "political/crypto",  "wallets_eth": "", "known_for": "Trump family. $1.55B token sales. USD1 stablecoin. Policy barometer.", "twitter": "@worldlibertyfi"},
+    {"name": "Michael Saylor/MSTR",    "manager": "Saylor", "type": "institutional BTC", "wallets_eth": "", "known_for": "560k+ BTC held. Leveraged via debt. Corporate BTC treasury pioneer.", "twitter": "@saylor"},
+    {"name": "a16z Crypto",            "manager": "a16z",   "type": "institutional",     "wallets_eth": "", "known_for": "Solana, Coinbase, Uniswap. $7.6B across 4 crypto funds.", "twitter": "@a16zcrypto"},
+    {"name": "Paradigm",               "manager": "Matt Huang","type": "crypto VC",      "wallets_eth": "", "known_for": "Coinbase, FTX (bad), Uniswap, Optimism. Most technical crypto VC.", "twitter": "@paradigm"},
+    {"name": "Binance/CZ",             "manager": "CZ",     "type": "exchange/whale",    "wallets_eth": "", "known_for": "Largest crypto exchange. BNB, BUSD. Post-SEC settlement rebuilding.", "twitter": "@cz_binance"},
+    {"name": "Pantera Capital",        "manager": "Dan Morehead","type": "crypto fund",  "wallets_eth": "", "known_for": "First dedicated US Bitcoin fund (2013). 66,000% return on BTC.", "twitter": "@panteracapital"},
+    {"name": "Galaxy Digital",         "manager": "Mike Novogratz","type": "institutional","wallets_eth":"", "known_for": "Listed crypto merchant bank. BTC bull. Luna call haunts him.", "twitter": "@novogratz"},
 ]
 
 # ── Tab 5: Market Makers ──────────────────────────────────────────────────────
 MARKET_MAKERS = [
-    {
-        "name": "Wintermute",
-        "type": "market maker",
-        "reputation": "Regulated, compliant, institutional",
-        "known_for": (
-            "Top crypto market maker. $5B+ daily volume. Strong institutional OTC desk. "
-            "Seen large exchange inflows from Wintermute wallets = institutional buying confirmed. "
-            "Compliant: works with regulators, clean track record."
-        ),
-        "signal_logic": (
-            "Large Wintermute wallet → exchange transfer = liquidity provision for major trade. "
-            "Wintermute involvement in token = legitimacy signal for that project."
-        ),
-        "wallets": {
-            "eth": "0xF6DA3E1b6b3f5a07e6C6e0F63Bda4B7F68Dc3e4",  # verify on Etherscan
-        },
-        "twitter": "@wintermute_t",
-        "controversy": "None significant — generally well-regarded",
-    },
-    {
-        "name": "DWF Labs",
-        "type": "market maker / investor",
-        "reputation": "High deal flow, some controversy",
-        "known_for": (
-            "Top 5 market maker by volume. Invests in early projects + provides liquidity. "
-            "WSJ investigation 2023: alleged wash trading concerns. High deal flow despite controversy. "
-            "Large OTC desk — pre-listing token purchases often visible on-chain."
-        ),
-        "signal_logic": (
-            "DWF wallet accumulation before listing = imminent exchange listing signal. "
-            "High short interest = potential pump target. "
-            "DYOR: their involvement cuts both ways (legitimacy + controversy)."
-        ),
-        "wallets": {
-            "eth": "0x6Fb7e0AAFBa16396Ad6c1046027717bcA25F821",  # verify on Etherscan
-        },
-        "twitter": "@DWFLabs",
-        "controversy": "WSJ 2023 investigation — alleged manipulation. Denied by DWF.",
-    },
-    {
-        "name": "Jump Crypto",
-        "type": "market maker / prop trading",
-        "reputation": "Traditional HFT background (Jump Trading)",
-        "known_for": "Backed Wormhole, Terra (LUNA — notable loss). HFT + market making + VC.",
-        "signal_logic": "Jump backing = institutional-grade tech credibility. Post-LUNA: more selective.",
-        "wallets": {},
-        "twitter": "@JumpCryptoHQ",
-        "controversy": "Lost $320M in Wormhole hack. Repaid it (strong balance sheet signal).",
-    },
+    {"name": "Wintermute",       "type": "crypto MM",    "reputation": "Compliant",    "known_for": "$5B+ daily volume. Institutional OTC. Wallet → exchange = big trade signal.", "twitter": "@wintermute_t",  "controversy": "None"},
+    {"name": "DWF Labs",         "type": "crypto MM/VC", "reputation": "Controversial","known_for": "Top 5 by volume. Pre-listing accumulation visible on-chain.", "twitter": "@DWFLabs",       "controversy": "WSJ 2023 wash trading allegation"},
+    {"name": "Jump Crypto",      "type": "HFT/MM",       "reputation": "Traditional",  "known_for": "Wormhole, Terra. HFT background. Repaid $320M Wormhole hack.", "twitter": "@JumpCryptoHQ",  "controversy": "Terra/LUNA exposure"},
+    {"name": "Virtu Financial",  "type": "HFT/MM (equities)","reputation": "Public",   "known_for": "Public HFT firm (VIRT). Profits from volatility. Penny wide bid-ask.", "twitter": "@VirtuFinancial","controversy": "None"},
+    {"name": "Jane Street",      "type": "Options MM",   "reputation": "Elite quant",  "known_for": "ETF arbitrage kings. Biggest options market maker. Hires top quants.", "twitter": None,             "controversy": "None (private)"},
+    {"name": "Susquehanna (SIG)","type": "Options MM",   "reputation": "Top tier",     "known_for": "Early TikTok investor via ByteDance. Giant options book.", "twitter": None,             "controversy": "TikTok investment scrutiny"},
+    {"name": "Alameda (defunct)","type": "FTX affiliate","reputation": "Collapsed",    "known_for": "Context only: how market maker collapse spreads contagion.", "twitter": None,             "controversy": "Fraud — FTX collapse 2022"},
 ]
 
 # ── Tab 6: Political Money ────────────────────────────────────────────────────
 POLITICAL_MONEY = [
-    {
-        "name": "Congressional Trades (All Members)",
-        "type": "disclosure",
-        "source": "https://www.capitoltrades.com",
-        "known_for": "STOCK Act requires congress members to disclose trades within 45 days.",
-        "signal_logic": (
-            "Committee assignments predict trades: Armed Services → defense stocks, "
-            "Finance → banks, Energy → oil/gas. "
-            "Multiple members buying same stock = committee has insider-adjacent knowledge."
-        ),
-        "top_traders": ["Nancy Pelosi (NVDA calls famous)", "Dan Crenshaw", "Michael McCaul"],
-    },
-    {
-        "name": "Trump Family Portfolio",
-        "type": "political + crypto",
-        "source": "Financial disclosures + World Liberty Financial announcements",
-        "known_for": "Truth Social (DJT stock), World Liberty Financial, Trump NFTs, USD1 stablecoin.",
-        "signal_logic": (
-            "DJT stock = Trump political sentiment proxy. "
-            "WLF token activity = crypto regulatory direction signal. "
-            "USD1 stablecoin volume = institutional adoption of Trump-aligned crypto."
-        ),
-    },
+    {"name": "Nancy Pelosi",         "party": "D", "committee": "Armed Services (past)", "known_for": "NVDA calls before AI boom. MSFT, GOOG, AAPL. Highest profile trader.", "source": "Capitol Trades"},
+    {"name": "Dan Crenshaw",         "party": "R", "committee": "Homeland Security",    "known_for": "Defense + energy trades. Cybersecurity committee access.", "source": "Capitol Trades"},
+    {"name": "Michael McCaul",       "party": "R", "committee": "Foreign Affairs",      "known_for": "Defense stocks correlated with committee votes.", "source": "Capitol Trades"},
+    {"name": "Tommy Tuberville",     "party": "R", "committee": "Armed Services",       "known_for": "Frequent defense contractor trades. Holding $1M-$50M in stock.", "source": "Capitol Trades"},
+    {"name": "Trump Family/WLF",     "party": "R", "committee": "Executive Branch",     "known_for": "DJT stock + World Liberty Financial + USD1. Policy=portfolio.", "source": "Disclosures"},
+    {"name": "Senate Finance Mbrs",  "party": "Both","committee": "Finance",            "known_for": "Watch for financial stock trades before rate decisions.", "source": "Senate STOCK Act"},
+    {"name": "House Energy Mbrs",    "party": "Both","committee": "Energy & Commerce",  "known_for": "Oil/gas + utilities trades before energy legislation.", "source": "House STOCK Act"},
 ]
 
-# ── Master list for easy iteration ────────────────────────────────────────────
+# ── Additional Sources (Tab 7+ / supplementary) ───────────────────────────────
+ADDITIONAL_SOURCES = {
+    "Form 4 (Insider Trades)": {
+        "url": "https://openinsider.com/screener?s=&o=&pl=&ph=&ll=&lh=&fd=14&fdr=&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&vl=&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=100&page=1",
+        "description": "SEC Form 4 insider buying — when CEOs buy their own stock it's a strong signal",
+    },
+    "Dataroma Superinvestors": {
+        "url": "https://www.dataroma.com/m/home.php",
+        "description": "Aggregates 13F data for 70+ superinvestors in one place",
+    },
+    "Unusual Whales (Options Flow)": {
+        "url": "https://unusualwhales.com",
+        "description": "Unusual options activity often precedes big moves — smart money via options",
+    },
+    "WhaleWisdom": {
+        "url": "https://whalewisdom.com",
+        "description": "13F aggregator — tracks quarter-over-quarter changes easily",
+    },
+}
+
+# Master registry
 ALL_WHALES = {
     "institutional":   INSTITUTIONAL,
     "ai_funds":        AI_FUNDS,
@@ -304,21 +109,21 @@ ALL_WHALES = {
 }
 
 TAB_LABELS = {
-    "institutional":   "🏦 顶级机构 / Top Institutions",
-    "ai_funds":        "🤖 AI专注基金 / AI-Focused Funds",
-    "asia_whales":     "🐉 亚洲大鲸 / Asia Whales",
-    "crypto_whales":   "🐋 加密鲸鱼 / Crypto Whales",
-    "market_makers":   "⚡ 做市商 / Market Makers",
-    "political_money": "🏛️ 政治资金 / Political Money",
+    "institutional":   "🏦 Top US Institutions (13F)",
+    "ai_funds":        "🤖 AI/Tech Focused Funds",
+    "asia_whales":     "🐉 Asia Whales",
+    "crypto_whales":   "🐋 Crypto Whales",
+    "market_makers":   "⚡ Market Makers",
+    "political_money": "🏛️ Political Money",
 }
 
-# SEC 13F CIKs for programmatic fetching
-SEC_13F_ENTITIES = {e["name"]: e["cik"] for tab in [INSTITUTIONAL, AI_FUNDS, ASIA_WHALES]
-                   for e in tab if e.get("cik")}
-
-# ARK publishes daily trades — no 13F lag
 ARK_FUNDS = {
     "ARKK": "https://ark-funds.com/wp-content/uploads/funds-etf-csv/ARK_INNOVATION_ETF_ARKK_HOLDINGS.csv",
     "ARKQ": "https://ark-funds.com/wp-content/uploads/funds-etf-csv/ARK_AUTONOMOUS_TECHNOLOGY_&_ROBOTICS_ETF_ARKQ_HOLDINGS.csv",
-    "ARKG": "https://ark-funds.com/wp-content/uploads/funds-etf-csv/ARK_GENOMIC_REVOLUTION_ETF_ARKG_HOLDINGS.csv",
+}
+
+SEC_13F_ENTITIES = {
+    e["name"]: e["cik"]
+    for tab in [INSTITUTIONAL, AI_FUNDS, ASIA_WHALES]
+    for e in tab if e.get("cik")
 }
