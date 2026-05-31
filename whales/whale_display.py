@@ -414,10 +414,14 @@ def run_whale_tracker() -> str:
     console.rule("[cyan]Tab 1 & 2: Institutional Holdings (SEC 13F + ARK Daily)[/cyan]")
 
     priority_13f = [
-        ("Berkshire Hathaway",    "0001067983"),
-        ("Scion Asset Mgmt",      "0001649978"),
-        ("Duquesne Family Office","0001536411"),
-        ("Appaloosa Management",  "0001006438"),
+        ("Berkshire Hathaway",    "0001067983"),  # Buffett
+        ("Scion Asset Mgmt",      "0001649978"),  # Burry
+        ("Duquesne Family Office","0001536411"),  # Druckenmiller
+        ("Appaloosa Management",  "0001006438"),  # Tepper
+        ("Pershing Square",       "0001477327"),  # Ackman
+        ("Viking Global",         "0001103804"),  # Halvorsen
+        ("Baupost Group",         "0001060349"),  # Klarman
+        ("Third Point LLC",       "0001040792"),  # Loeb
     ]
 
     tab12_trades = []

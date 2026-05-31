@@ -8,7 +8,7 @@ INSTITUTIONAL = [
     {"name": "Berkshire Hathaway",    "manager": "Warren Buffett",        "cik": "0001067983", "style": "Value/Long-only",          "known_for": "Apple, OXY, AMEX, BofA. Never shorts. Long-term."},
     {"name": "Scion Asset Mgmt",      "manager": "Michael Burry",         "cik": "0001649978", "style": "Contrarian/Short",         "known_for": "Predicted 2008. Concentrated shorts via puts. Often early."},
     {"name": "Duquesne Family Office","manager": "Stanley Druckenmiller",  "cik": "0001536411", "style": "Global Macro/Growth",      "known_for": "30yr no losing year. Follows earnings momentum hard."},
-    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0001336528", "style": "Activist/Concentrated",    "known_for": "Chipotle, Universal Music. Loud public announcements."},
+    {"name": "Pershing Square",       "manager": "Bill Ackman",           "cik": "0001477327", "style": "Activist/Concentrated",    "known_for": "Chipotle, Universal Music. Loud public announcements."},
     {"name": "Appaloosa Management",  "manager": "David Tepper",          "cik": "0001006438", "style": "Distressed/Event",         "known_for": "Bought banks in 2009 bottom. Risk-on/off caller."},
     {"name": "Third Point LLC",       "manager": "Dan Loeb",              "cik": "0001040792", "style": "Activist/Tech",            "known_for": "Disney, Sony activist. Strong tech + event-driven."},
     {"name": "Citadel Advisors",      "manager": "Ken Griffin",           "cik": "0001423298", "style": "Multi-strategy/HFT",       "known_for": "Largest HF by revenue. Massive options flow."},
