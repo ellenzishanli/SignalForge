@@ -1,0 +1,16 @@
+# LLM providers (install at least one)
+groq>=0.9.0              # FREE — recommended, sign up at console.groq.com
+# anthropic>=0.50.0      # paid
+# google-generativeai    # free tier
+
+# Data & scraping
+yfinance>=0.2.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+feedparser>=6.0.0
+praw>=7.7.0
+
+# Utilities
+python-dotenv>=1.0.0
+rich>=13.0.0
+schedule>=1.2.0
