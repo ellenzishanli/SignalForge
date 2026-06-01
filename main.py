@@ -209,18 +209,25 @@ def run_briefing_only():
         display.print(_SCROLL_HINT)
 
 
+def run_backtest_mode():
+    """Walk-forward backtest + factor weight optimization."""
+    from stocks.backtest import run_backtest_and_display
+    run_backtest_and_display(console)
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Frontier Tech Radar")
-    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems", "whales"], default="full")
+    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems", "whales", "backtest"], default="full")
     args = parser.parse_args()
 
     provider = get_provider()
     if provider == "groq" and not os.getenv("GROQ_API_KEY"):
         console.print("[red]Error: Set GROQ_API_KEY in .env[/red]"); sys.exit(1)
 
-    if args.mode == "full":       run_tech_radar()
-    elif args.mode == "stocks":   run_stocks()
-    elif args.mode == "briefing": run_briefing_only()
-    elif args.mode == "gems":     run_gems_only()
-    elif args.mode == "whales":   run_whales_only()
+    if args.mode == "full":         run_tech_radar()
+    elif args.mode == "stocks":     run_stocks()
+    elif args.mode == "briefing":   run_briefing_only()
+    elif args.mode == "gems":       run_gems_only()
+    elif args.mode == "whales":     run_whales_only()
+    elif args.mode == "backtest":   run_backtest_mode()
