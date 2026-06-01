@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.universe import SECTORS, AI_ETFS
 from stocks.quant import build_quant_report, QuantReport, format_quant_one_liner
 
-console = Console()
+console = Console(width=280)
 
 
 @dataclass

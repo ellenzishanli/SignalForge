@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.universe import HIDDEN_GEMS as HIDDEN_GEM_TICKERS
 from stocks.quant import build_quant_report, QuantReport
 
-console = Console()
+console = Console(width=280)
 
 
 @dataclass

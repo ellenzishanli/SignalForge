@@ -32,7 +32,10 @@ from analysis.ai_analyst import summarize_daily_data, analyze_full_market
 from analysis.llm_client import get_provider
 from config.universe import SECTORS
 
-console = Console(width=220)
+import os
+os.environ.setdefault("LESS", "-RS")
+
+console = Console(width=280)
 TODAY = datetime.now().strftime("%Y-%m-%d")
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)

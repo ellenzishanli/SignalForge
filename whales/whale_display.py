@@ -29,7 +29,7 @@ from whales.social_signals import (
 )
 from config.whales import ALL_WHALES
 
-console = Console(width=220)
+console = Console(width=280)
 WEB_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 SEC_HEADERS = {"User-Agent": "SignalForge research@signalforge.io"}
 
@@ -379,9 +379,11 @@ def render_consolidated_table(trades: List[WhaleTrade], title: str,
         best = max(ts, key=lambda t: t.quant_score)
         total_val = sum(t.value_usd_m for t in ts)
         fund_parts = []
-        for t in sorted(ts, key=lambda x: x.value_usd_m, reverse=True)[:4]:
-            pct_str = f"{t.value_usd_m:.0f}M" if t.value_usd_m > 0 else "?"
-            fund_parts.append(f"{t.whale[:18]}({pct_str})")
+        for t in sorted(ts, key=lambda x: x.value_usd_m, reverse=True)[:2]:
+            name_s = t.whale[:12].rstrip()
+            sz = (f"${t.value_usd_m/1000:.1f}B" if t.value_usd_m >= 1000
+                  else f"${t.value_usd_m:.0f}M" if t.value_usd_m > 0 else "?")
+            fund_parts.append(f"{name_s}({sz})")
         top_change = max(ts, key=lambda t: CHANGE_PRIORITY.get(t.action, 0)).action
         rows.append((ticker, best, ts, total_val, fund_parts, top_change))
 
@@ -392,16 +394,15 @@ def render_consolidated_table(trades: List[WhaleTrade], title: str,
     ), reverse=True)
 
     tbl = Table(title=title, box=box.ROUNDED, show_lines=True,
-                header_style="bold white on dark_blue", min_width=220)
-    tbl.add_column("Ticker",      width=7,  style="bold")
-    tbl.add_column("Company",     width=28, no_wrap=True)
-    tbl.add_column("Funds",       width=8,  justify="center")
-    tbl.add_column("Who + Size",  width=70, no_wrap=False)
-    tbl.add_column("Total $M",    width=10, justify="right")
-    tbl.add_column("Change",      width=12, justify="center")
-    tbl.add_column("Quant",       width=7,  justify="right")
-    tbl.add_column("Signal",      width=12, justify="center")
-    tbl.add_column("Follow",      width=14, justify="center")
+                header_style="bold white on dark_blue", min_width=140)
+    tbl.add_column("Ticker",   width=7,  style="bold")
+    tbl.add_column("Company",  width=24, no_wrap=True)
+    tbl.add_column("Holders",  width=46, no_wrap=True)
+    tbl.add_column("Total $M", width=10, justify="right")
+    tbl.add_column("Change",   width=12, justify="center")
+    tbl.add_column("Quant",    width=7,  justify="right")
+    tbl.add_column("Signal",   width=12, justify="center")
+    tbl.add_column("Follow",   width=14, justify="center")
 
     CHANGE_COLOR = {"NEW BUY":"bold green","INCREASED":"green",
                     "DECREASED":"red","HOLD/LONG":"dim","SHORT":"bold red","CALL":"cyan"}
@@ -418,11 +419,12 @@ def render_consolidated_table(trades: List[WhaleTrade], title: str,
         c_col = CHANGE_COLOR.get(top_change, "dim")
         sig_str = "—" if best.quant_signal in ("N/A","","HOLD","NEW BUY","INCREASED",
                                                 "DECREASED","CLOSED") else f"[{q_col}]{best.quant_signal}[/{q_col}]"
+        n_extra = len(ts) - 2
+        holders_str = "  ".join(fund_parts) + (f"  +{n_extra}" if n_extra > 0 else "")
         tbl.add_row(
             ticker,
-            best.company[:28],
-            str(len(ts)),
-            "  ".join(fund_parts),
+            best.company[:24],
+            holders_str,
             f"${total_val:.0f}M" if total_val > 0 else "—",
             f"[{c_col}]{top_change}[/{c_col}]",
             f"[{q_s}]{best.quant_score:.0f}[/{q_s}]" if best.quant_score > 0 else "—",
@@ -569,13 +571,17 @@ def render_follow_summary(all_trades: List[WhaleTrade]) -> Table:
 # ── Main Runner ────────────────────────────────────────────────────────────────
 
 def run_whale_tracker() -> str:
+    import os
+    os.environ.setdefault("LESS", "-RS")
     all_trades: List[WhaleTrade] = []
     summary_lines = []
-    out = Console(width=220)
-    return _whale_tracker_body(out, all_trades, summary_lines)
+    out = Console(width=280)
+    with out.pager(styles=True):
+        _whale_tracker_body(out, all_trades, summary_lines)
+    return "\n".join(summary_lines)
 
 
-def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_lines: list) -> str:
+def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_lines: list) -> None:
     out.rule("[bold yellow]🐋 WHALE TRACKER — Smart Money Intelligence[/bold yellow]")
 
     # ── Tab 1 & 2: Institutional + AI Funds (13F + ARK + Dataroma) ───────────
@@ -771,7 +777,7 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
     out.rule("[bold yellow]🎯 BEST FOLLOW OPPORTUNITIES[/bold yellow]")
     out.print(render_follow_summary(all_trades))
     out.print()
-    out.print("[dim]Scroll: output auto-paged via less -R when running in a terminal.[/dim]")
+    out.print("[dim]← → scroll horizontally  |  ↑ ↓ scroll vertically  |  q to exit[/dim]")
 
     # Build summary for AI analysis
     strong = [t for t in all_trades if t.follow == "STRONG_FOLLOW"]
@@ -779,5 +785,3 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
     summary_lines.append(f"WHALE TRACKER: {len(all_trades)} raw signals, {len(set(t.ticker for t in all_trades))} unique tickers")
     summary_lines.append("Strong Follow: " + ", ".join(f"{t.ticker}({t.whale[:12]})" for t in strong[:6]))
     summary_lines.append("Follow: " + ", ".join(f"{t.ticker}({t.whale[:12]})" for t in follow[:6]))
-
-    return "\n".join(summary_lines)
