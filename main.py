@@ -19,6 +19,7 @@ from rich.rule import Rule
 
 load_dotenv()
 sys.path.insert(0, os.path.dirname(__file__))
+os.environ.setdefault("LESS", "-RS")  # horizontal scroll in all pagers
 
 from whales.whale_display import run_whale_tracker
 from scrapers.github_trending import fetch_github_trending
@@ -32,57 +33,65 @@ from analysis.ai_analyst import summarize_daily_data, analyze_full_market
 from analysis.llm_client import get_provider
 from config.universe import SECTORS
 
-import os
-os.environ.setdefault("LESS", "-RS")
-
 console = Console(width=280)
 TODAY = datetime.now().strftime("%Y-%m-%d")
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
+_SCROLL_HINT = "[dim]← → scroll horizontally  |  ↑ ↓ scroll vertically  |  q to exit[/dim]"
+
 
 def run_stocks(briefing_mode: bool = False):
     """Core stock analysis — sectors + hidden gems + ETF."""
+
+    # ── Phase 1: Data loading (spinners visible in terminal) ──────────────────
     console.print(Rule(f"[bold green]📈 Market Scan — {TODAY}[/bold green]"))
     console.print(f"[dim]LLM: {get_provider().upper()} | Sectors: {len(SECTORS)} | Mode: {'full' if not briefing_mode else 'stocks-only'}[/dim]\n")
 
-    # ── ETF scan (always first) ────────────────────────────────────────────────
     console.print("[bold]📦 Scanning ETFs...[/bold]")
     etf_stocks = scan_etfs()
     console.print(f"  ✓ {len(etf_stocks)} ETFs loaded\n")
-    console.print(render_etf_table(etf_stocks))
-    console.print()
 
-    # ── Sector scan ────────────────────────────────────────────────────────────
     console.print(f"[bold]🔭 Scanning {len(SECTORS)} market sectors...[/bold]")
     sector_results = scan_all_sectors(top_n=4)
     all_sector_stocks = sector_results.get("_all", [])
     console.print(f"  ✓ {len(all_sector_stocks)} stocks loaded across {len(SECTORS)} sectors\n")
 
-    for sector_name, stocks in sector_results.items():
-        if sector_name == "_all" or not stocks:
-            continue
-        console.print(render_sector_table(sector_name, stocks))
-        console.print()
-
-    # ── Hidden Gems ────────────────────────────────────────────────────────────
     console.print("[bold]💎 Scanning hidden gems universe...[/bold]")
     gems = scan_hidden_gems()
     console.print(f"  ✓ {len(gems)} gems loaded\n")
-    console.print(render_hidden_gems_table(gems))
-    console.print()
 
-    # ── AI Analysis ────────────────────────────────────────────────────────────
     console.print("[bold yellow]🧠 Generating bilingual AI market analysis...[/bold yellow]")
     context = build_sector_context_for_ai(sector_results, etf_stocks, gems)
     with console.status("AI analyzing (English + Chinese)..."):
         analysis = analyze_full_market(context, len(SECTORS), len(gems))
+    console.print("  ✓ Analysis done — opening results in pager...\n")
 
-    console.print(Panel(
-        Markdown(analysis),
-        title="[bold yellow]Market Intelligence Report / 市场情报报告[/bold yellow]",
-        border_style="yellow", padding=(1, 2),
-    ))
+    # ── Phase 2: Display (in pager — use ← → to scroll wide tables) ──────────
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule(f"[bold green]📈 Market Scan — {TODAY}[/bold green]"))
+        display.print()
+
+        display.print(render_etf_table(etf_stocks))
+        display.print()
+
+        for sector_name, stocks in sector_results.items():
+            if sector_name == "_all" or not stocks:
+                continue
+            display.print(render_sector_table(sector_name, stocks))
+            display.print()
+
+        display.print(render_hidden_gems_table(gems))
+        display.print()
+
+        display.print(Panel(
+            Markdown(analysis),
+            title="[bold yellow]Market Intelligence Report / 市场情报报告[/bold yellow]",
+            border_style="yellow", padding=(1, 2),
+        ))
+        display.print()
+        display.print(_SCROLL_HINT)
 
     return sector_results, etf_stocks, gems, analysis
 
@@ -95,35 +104,45 @@ def run_whales_only():
 
 def run_tech_radar():
     """Full run: whales FIRST, then stocks, then tech briefing."""
-    # ── 0. Whale Tracker (shown first) ────────────────────────────────────────
+
+    # ── 0. Whale Tracker (has its own pager) ──────────────────────────────────
     console.print(Rule(f"[bold yellow]🐋 Part 0: Smart Money / Whale Tracker[/bold yellow]"))
     run_whale_tracker()
     console.print()
 
+    # ── 1. Stocks (has its own pager) ─────────────────────────────────────────
     sector_results, etf_stocks, gems, stock_analysis = run_stocks(briefing_mode=False)
-
     console.print()
+
+    # ── 2. Tech Briefing ──────────────────────────────────────────────────────
     console.print(Rule("[bold cyan]🔭 Tech Radar Briefing[/bold cyan]"))
 
-    with console.status("Fetching tech data sources..."):
+    console.print("[bold]Fetching tech data sources...[/bold]")
+    with console.status("Fetching..."):
         github   = fetch_github_trending()
         products = fetch_producthunt_top()
         feeds    = fetch_feeds()
         reddit   = fetch_reddit_hot()
         yc       = fetch_yc_latest("W25")
-
-    console.print(f"[dim]GitHub:{len(github)} | Feeds:{len(feeds)} | Reddit:{len(reddit)} | YC:{len(yc)}[/dim]\n")
+    console.print(f"  ✓ GitHub:{len(github)} | Feeds:{len(feeds)} | Reddit:{len(reddit)} | YC:{len(yc)}\n")
 
     with console.status("Generating tech briefing (bilingual)..."):
         briefing = summarize_daily_data(github, products, feeds, reddit, yc)
+    console.print("  ✓ Briefing done — opening in pager...\n")
 
-    console.print(Panel(
-        Markdown(briefing),
-        title="[bold cyan]Frontier Tech Radar — Daily Briefing / 每日科技简报[/bold cyan]",
-        border_style="cyan", padding=(1, 2),
-    ))
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule("[bold cyan]🔭 Frontier Tech Radar — Daily Briefing[/bold cyan]"))
+        display.print()
+        display.print(Panel(
+            Markdown(briefing),
+            title="[bold cyan]Frontier Tech Radar — Daily Briefing / 每日科技简报[/bold cyan]",
+            border_style="cyan", padding=(1, 2),
+        ))
+        display.print()
+        display.print(_SCROLL_HINT)
 
-    # Save
+    # Save combined report
     output_file = OUTPUT_DIR / f"radar_{TODAY}.md"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(f"# Frontier Tech Radar — {TODAY}\n\n")
@@ -136,31 +155,58 @@ def run_tech_radar():
 
 def run_gems_only():
     """Quick scan: hidden gems only."""
+
+    # ── Phase 1: Loading ──────────────────────────────────────────────────────
     console.print(Rule(f"[bold yellow]💎 Hidden Gems Scan — {TODAY}[/bold yellow]"))
     gems = scan_hidden_gems()
-    console.print(f"[dim]{len(gems)} gems loaded[/dim]\n")
-    console.print(render_hidden_gems_table(gems))
+    console.print(f"  ✓ {len(gems)} gems loaded\n")
 
-    console.print("\n[bold]🧠 AI analysis...[/bold]")
+    console.print("[bold]🧠 AI analysis...[/bold]")
     from stocks.sector_scan import build_sector_context_for_ai
     context = build_sector_context_for_ai({}, [], gems)
     with console.status("Analyzing..."):
         analysis = analyze_full_market(context, 0, len(gems))
-    console.print(Panel(Markdown(analysis), title="Hidden Gems Analysis", border_style="yellow", padding=(1,2)))
+    console.print("  ✓ Done — opening in pager...\n")
+
+    # ── Phase 2: Display ──────────────────────────────────────────────────────
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule(f"[bold yellow]💎 Hidden Gems — {TODAY}[/bold yellow]"))
+        display.print()
+        display.print(render_hidden_gems_table(gems))
+        display.print()
+        display.print(Panel(Markdown(analysis), title="[bold yellow]Hidden Gems Analysis[/bold yellow]",
+                            border_style="yellow", padding=(1, 2)))
+        display.print()
+        display.print(_SCROLL_HINT)
 
 
 def run_briefing_only():
     """Tech briefing only."""
+
+    # ── Phase 1: Loading ──────────────────────────────────────────────────────
     console.print(Rule(f"[bold cyan]🔭 Tech Briefing — {TODAY}[/bold cyan]"))
-    with console.status("Fetching..."):
-        github = fetch_github_trending()
+    with console.status("Fetching data sources..."):
+        github   = fetch_github_trending()
         products = fetch_producthunt_top()
-        feeds  = fetch_feeds()
-        reddit = fetch_reddit_hot()
-        yc     = fetch_yc_latest("W25")
+        feeds    = fetch_feeds()
+        reddit   = fetch_reddit_hot()
+        yc       = fetch_yc_latest("W25")
+    console.print(f"  ✓ GitHub:{len(github)} | Feeds:{len(feeds)} | Reddit:{len(reddit)} | YC:{len(yc)}\n")
+
     with console.status("Generating bilingual briefing..."):
         briefing = summarize_daily_data(github, products, feeds, reddit, yc)
-    console.print(Panel(Markdown(briefing), title="Daily Tech Briefing", border_style="cyan", padding=(1,2)))
+    console.print("  ✓ Done — opening in pager...\n")
+
+    # ── Phase 2: Display ──────────────────────────────────────────────────────
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule(f"[bold cyan]🔭 Tech Briefing — {TODAY}[/bold cyan]"))
+        display.print()
+        display.print(Panel(Markdown(briefing), title="[bold cyan]Daily Tech Briefing / 每日科技简报[/bold cyan]",
+                            border_style="cyan", padding=(1, 2)))
+        display.print()
+        display.print(_SCROLL_HINT)
 
 
 if __name__ == "__main__":
