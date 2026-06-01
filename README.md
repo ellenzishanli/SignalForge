@@ -68,7 +68,7 @@ This tool surfaces what long-term, fundamental investors are buying — not mome
 - **Long-term bias**: quant weights fundamentals over short-term momentum
 
 ```bash
-python3 main.py --mode whales 2>/dev/null | less -R
+python3 main.py --mode whales
 ```
 
 ---
@@ -120,8 +120,8 @@ cp .env.example .env
 
 ### 4. Run
 ```bash
-# Whale tracker — smart money intelligence (7 tabs)
-python3 main.py --mode whales 2>/dev/null | less -R
+# Whale tracker — smart money intelligence
+python3 main.py --mode whales
 
 # Full run: whales + sector scan + hidden gems + ETF + tech briefing
 python3 main.py --mode full
@@ -129,12 +129,27 @@ python3 main.py --mode full
 # Stock analysis only (all sectors + ETF + hidden gems)
 python3 main.py --mode stocks
 
-# Hidden gems only (fastest)
+# Hidden gems only (fastest, ~1 min)
 python3 main.py --mode gems
 
 # Tech briefing only
 python3 main.py --mode briefing
 ```
+
+### 5. Navigate the output
+
+Every mode uses a **built-in scrollable pager** (`less`). Loading and AI analysis run first with live progress in your terminal — then the results open in the pager automatically.
+
+| Key | Action |
+|-----|--------|
+| `← →` arrow keys | Scroll left/right through wide tables |
+| `↑ ↓` arrow keys or `j` / `k` | Scroll up/down |
+| `G` | Jump to the bottom (Follow Opportunities summary) |
+| `g` | Jump back to the top |
+| `/` then text | Search within the output |
+| `q` | Exit the pager and return to terminal |
+
+> **Tip:** `--mode full` opens 3 sequential pagers — whale tracker → stocks → tech briefing. Press `q` to move from one to the next.
 
 ---
 
