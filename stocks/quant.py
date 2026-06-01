@@ -217,10 +217,10 @@ def _compute_kalman(closes: pd.Series) -> KalmanState:
     for i, obs in enumerate(prices):
         x = F @ x;  P = F @ P @ F.T + Q
         S = float((H @ P @ H.T)[0,0]) + R
-        K = (P @ H.T) / S
-        x = x + K.flatten() * (obs - float((H @ x)[0]))
-        P = (np.eye(2) - np.outer(K.flatten(), H)) @ P
-        filtered[i] = x[0]; gains[i] = float(K[0])
+        K = ((P @ H.T) / S).flatten()          # always shape (2,) — avoids ndim>0 scalar warnings
+        x = x + K * (obs - float((H @ x)[0]))
+        P = (np.eye(2) - np.outer(K, H)) @ P
+        filtered[i] = x[0]; gains[i] = K[0]   # both plain scalars now
 
     fv = filtered[-1]
     noise_std = np.std(prices - filtered) + 1e-9
