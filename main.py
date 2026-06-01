@@ -27,10 +27,13 @@ from scrapers.producthunt import fetch_producthunt_top
 from scrapers.feeds import fetch_feeds
 from scrapers.reddit_ai import fetch_reddit_hot
 from scrapers.yc import fetch_yc_latest
+from scrapers.macro_news import fetch_macro_headlines
 from stocks.sector_scan import scan_all_sectors, scan_etfs, render_sector_table, render_etf_table, build_sector_context_for_ai
 from stocks.hidden_gems import scan_hidden_gems, render_hidden_gems_table
 from analysis.ai_analyst import summarize_daily_data, analyze_full_market
 from analysis.llm_client import get_provider
+from analysis.headline_trades import analyze_headline_trades, render_headline_trades_panel
+from analysis.emailer import send_daily_report, check_email_config
 from config.universe import SECTORS
 
 console = Console(width=280)
@@ -39,6 +42,33 @@ OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 _SCROLL_HINT = "[dim]← → scroll horizontally  |  ↑ ↓ scroll vertically  |  q to exit[/dim]"
+
+
+def run_headline_trades() -> str:
+    """
+    Fetch macro headlines, run LLM analysis, display a Rich panel in the pager,
+    and return the raw analysis text (for use in email reports).
+    """
+    console.print("[bold red]🚨 Fetching macro headlines...[/bold red]")
+    with console.status("Fetching RSS feeds..."):
+        headlines = fetch_macro_headlines()
+    console.print(f"  ✓ {len(headlines)} headlines fetched\n")
+
+    console.print("[bold yellow]🧠 Analyzing macro shocks...[/bold yellow]")
+    with console.status("LLM identifying macro events and trade ideas..."):
+        analysis = analyze_headline_trades(headlines)
+    console.print("  ✓ Analysis done — opening in pager...\n")
+
+    panel = render_headline_trades_panel(analysis)
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule("[bold red]🚨 Macro Shock Monitor[/bold red]"))
+        display.print()
+        display.print(panel)
+        display.print()
+        display.print(_SCROLL_HINT)
+
+    return analysis
 
 
 def run_stocks(briefing_mode: bool = False):
@@ -65,7 +95,17 @@ def run_stocks(briefing_mode: bool = False):
     context = build_sector_context_for_ai(sector_results, etf_stocks, gems)
     with console.status("AI analyzing (English + Chinese)..."):
         analysis = analyze_full_market(context, len(SECTORS), len(gems))
-    console.print("  ✓ Analysis done — opening results in pager...\n")
+    console.print("  ✓ Analysis done\n")
+
+    console.print("[bold red]🚨 Fetching macro headlines...[/bold red]")
+    with console.status("Fetching RSS feeds..."):
+        headlines = fetch_macro_headlines()
+    console.print(f"  ✓ {len(headlines)} headlines fetched\n")
+
+    console.print("[bold yellow]🧠 Analyzing macro shocks...[/bold yellow]")
+    with console.status("LLM identifying macro events and trade ideas..."):
+        headline_analysis = analyze_headline_trades(headlines)
+    console.print("  ✓ Macro analysis done — opening results in pager...\n")
 
     # ── Phase 2: Display (in pager — use ← → to scroll wide tables) ──────────
     display = Console(width=280)
@@ -85,6 +125,9 @@ def run_stocks(briefing_mode: bool = False):
         display.print(render_hidden_gems_table(gems))
         display.print()
 
+        display.print(render_headline_trades_panel(headline_analysis))
+        display.print()
+
         display.print(Panel(
             Markdown(analysis),
             title="[bold yellow]Market Intelligence Report / 市场情报报告[/bold yellow]",
@@ -93,7 +136,7 @@ def run_stocks(briefing_mode: bool = False):
         display.print()
         display.print(_SCROLL_HINT)
 
-    return sector_results, etf_stocks, gems, analysis
+    return sector_results, etf_stocks, gems, analysis, headline_analysis
 
 
 def run_whales_only():
@@ -111,7 +154,7 @@ def run_tech_radar():
     console.print()
 
     # ── 1. Stocks (has its own pager) ─────────────────────────────────────────
-    sector_results, etf_stocks, gems, stock_analysis = run_stocks(briefing_mode=False)
+    sector_results, etf_stocks, gems, stock_analysis, _headline_analysis = run_stocks(briefing_mode=False)
     console.print()
 
     # ── 2. Tech Briefing ──────────────────────────────────────────────────────
@@ -209,6 +252,50 @@ def run_briefing_only():
         display.print(_SCROLL_HINT)
 
 
+def run_email_mode():
+    """
+    Full run (whales + stocks + briefing) then email the saved report.
+
+    Workflow:
+      1. run_tech_radar()  — generates output/radar_YYYY-MM-DD.md
+      2. run_headline_trades()  — fetches and analyses macro headlines
+      3. Read the saved report file
+      4. Send HTML email with headline trades + full report
+    """
+    console.print(Rule(f"[bold blue]📧 Email Report Mode — {TODAY}[/bold blue]"))
+
+    # Full pipeline — saves report to output/radar_{TODAY}.md
+    run_tech_radar()
+
+    # Standalone headline trades (run_tech_radar already ran stocks which
+    # fetches headlines internally, but we want a fresh standalone panel here
+    # for the email; use the already-computed analysis if possible)
+    console.print()
+    console.print(Rule("[bold red]🚨 Running Standalone Headline Trades for Email[/bold red]"))
+    headline_trades_text = run_headline_trades()
+
+    # Read the saved report
+    output_file = OUTPUT_DIR / f"radar_{TODAY}.md"
+    report_md = ""
+    if output_file.exists():
+        report_md = output_file.read_text(encoding="utf-8")
+        console.print(f"\n[dim]Report file: {output_file}[/dim]")
+    else:
+        console.print(f"[yellow]Warning: report file not found at {output_file}[/yellow]")
+        report_md = "(Report file not found — check run_tech_radar output)"
+
+    # Send email
+    console.print()
+    console.print("[bold blue]📧 Sending email report...[/bold blue]")
+    if not check_email_config():
+        console.print(
+            "[yellow]Email not configured. Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD in .env "
+            "to enable automatic email delivery.[/yellow]"
+        )
+    send_daily_report(report_md, headline_trades=headline_trades_text)
+    console.print("[bold green]✅ Email mode complete.[/bold green]")
+
+
 def run_backtest_mode():
     """Walk-forward backtest + factor weight optimization."""
     from stocks.backtest import run_backtest_and_display
@@ -218,7 +305,7 @@ def run_backtest_mode():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Frontier Tech Radar")
-    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems", "whales", "backtest"], default="full")
+    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems", "whales", "backtest", "email"], default="full")
     args = parser.parse_args()
 
     provider = get_provider()
@@ -231,3 +318,4 @@ if __name__ == "__main__":
     elif args.mode == "gems":       run_gems_only()
     elif args.mode == "whales":     run_whales_only()
     elif args.mode == "backtest":   run_backtest_mode()
+    elif args.mode == "email":      run_email_mode()
