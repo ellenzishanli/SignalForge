@@ -259,6 +259,40 @@ def analyze_full_market(context: str, n_sectors: int = 0, n_gems: int = 0) -> st
     return call_llm(prompt, max_tokens=2500)
 
 
+def analyze_ai_infrastructure(context: str) -> str:
+    """
+    Focused take on the AI infrastructure value chain: which names look like the
+    'next Micron' — undervalued/fair with high growth and real upside — vs. which
+    are already extended. Bilingual (EN + 中文), concise to stay within token caps.
+    """
+    prompt = f"""You are a buy-side analyst specializing in the AI infrastructure
+value chain (compute silicon, foundry, memory, networking/optics, servers &
+cooling, neoclouds, and the power layer). Below are the top-ranked opportunities
+from a quant screen that rewards FAIR/CHEAP valuation + high growth + analyst
+upside, and penalizes already-extended momentum names.
+
+{context}
+
+Today: {TODAY}.
+
+Write a concise briefing in this exact structure:
+
+## 🚀 The "Next Micron" Candidates
+3–5 names with the best asymmetric setup (still reasonably valued, strong growth,
+real upside). For each: 1 sentence on the thesis + the single biggest risk.
+
+## 🔗 Value-Chain Read
+2–3 sentences: which LAYER of the stack looks most mispriced right now and why
+(e.g. is the market paying up for silicon while ignoring power/cooling?).
+
+## ⚠️ Crowded / Extended
+1–2 names that are great companies but where the easy money may be made.
+
+Keep it tight and decision-useful — no filler. Then provide a full 中文 translation
+under a "## 中文分析" heading with the same structure."""
+    return call_llm(prompt, max_tokens=2000)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TECH BRIEFING (sell-side style, bilingual)
 # ══════════════════════════════════════════════════════════════════════════════

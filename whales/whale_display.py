@@ -28,6 +28,7 @@ from whales.social_signals import (
     fetch_whale_news, fetch_sec_13f_alerts,
 )
 from config.whales import ALL_WHALES
+from stocks.parallel import parallel_fetch
 
 console = Console(width=280)
 WEB_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
@@ -617,11 +618,18 @@ def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_line
         ("WorldQuant Millennium", "0001745981"),
     ]
 
+    # Fetch all funds' 13F filings concurrently. A global 8 req/s limiter inside
+    # sec_13f keeps us within SEC EDGAR's 10 req/s fair-access ceiling regardless
+    # of how many fund threads are in flight — so this is fast AND compliant.
+    out.print(f"  [dim]→ Fetching {len(priority_13f)} funds' 13F filings in parallel (SEC rate-limited)...[/dim]")
     tab12: List[WhaleTrade] = []
-    for name, cik in priority_13f:
-        out.print(f"  [dim]→ {name}...[/dim]")
-        tab12.extend(get_13f_trades(name, cik))
-        time.sleep(0.2)
+    fund_trade_lists = parallel_fetch(
+        priority_13f,
+        lambda job: get_13f_trades(job[0], job[1]),
+        max_workers=6,
+    )
+    for trades in fund_trade_lists:
+        tab12.extend(trades)
 
     out.print("  [dim]→ ARK daily...[/dim]")
     tab12.extend(get_ark_trades("ARKK"))

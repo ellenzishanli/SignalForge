@@ -2,11 +2,12 @@
 """
 SignalForge
 Modes:
-  full     — whales + stocks (all sectors + gems + ETF) + tech briefing
+  full     — AI infra + whales + stocks (all sectors + gems + ETF) + tech briefing
+  aii      — AI Infrastructure value-chain scan (hunt the 'next Micron')
   stocks   — sector scan + hidden gems + ETF (no tech news)
   briefing — tech news only (no stocks)
   gems     — hidden gems only (fastest)
-  whales   — smart money tracker only (6 tabs)
+  whales   — smart money tracker only (7 tabs)
 """
 import os, sys
 from datetime import datetime
@@ -30,7 +31,11 @@ from scrapers.yc import fetch_yc_latest
 from scrapers.macro_news import fetch_macro_headlines
 from stocks.sector_scan import scan_all_sectors, scan_etfs, render_sector_table, render_etf_table, build_sector_context_for_ai
 from stocks.hidden_gems import scan_hidden_gems, render_hidden_gems_table
-from analysis.ai_analyst import summarize_daily_data, analyze_full_market
+from stocks.ai_infrastructure import (
+    scan_ai_infrastructure, render_opportunity_leaderboard,
+    render_layer_table, build_ai_infra_context,
+)
+from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analyze_ai_infrastructure
 from analysis.llm_client import get_provider
 from analysis.headline_trades import analyze_headline_trades, render_headline_trades_panel
 from analysis.emailer import send_daily_report, check_email_config
@@ -65,6 +70,56 @@ def run_headline_trades() -> str:
         display.print(Rule("[bold red]🚨 Macro Shock Monitor[/bold red]"))
         display.print()
         display.print(panel)
+        display.print()
+        display.print(_SCROLL_HINT)
+
+    return analysis
+
+
+def run_ai_infra():
+    """
+    AI Infrastructure value-chain scan — hunt the 'next Micron'.
+    Scores every name across the stack on valuation + growth + analyst upside,
+    surfacing fairly-valued high-potential setups over already-extended winners.
+    Returns the AI analysis text (for reuse in the full report / email).
+    """
+    console.print(Rule(f"[bold green]🛰️  AI Infrastructure Value Chain — {TODAY}[/bold green]"))
+    console.print("[dim]Hunting the next Micron: fair value + high growth + real upside, across the whole AI stack[/dim]\n")
+
+    console.print("[bold]🛰️  Scanning AI infrastructure value chain...[/bold]")
+    picks = scan_ai_infrastructure()
+    console.print(f"  ✓ {len(picks)} names scored across {len(set(p.layer for p in picks))} layers\n")
+
+    n_winners = sum(1 for p in picks if p.is_next_micron)
+    console.print(f"  ⭐ {n_winners} 'next Micron' asymmetric setups flagged\n")
+
+    console.print("[bold yellow]🧠 Generating AI infrastructure briefing (EN + 中文)...[/bold yellow]")
+    with console.status("AI analyzing the value chain..."):
+        analysis = analyze_ai_infrastructure(build_ai_infra_context(picks))
+    console.print("  ✓ Analysis done — opening in pager...\n")
+
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule(f"[bold green]🛰️  AI Infrastructure Value Chain — {TODAY}[/bold green]"))
+        display.print()
+        display.print(render_opportunity_leaderboard(picks, top_n=20))
+        display.print()
+        display.print(Rule("[dim]Value-chain breakdown by layer[/dim]"))
+        display.print()
+
+        # Per-layer tables, preserving the value-chain order from the universe.
+        from config.universe import AI_INFRASTRUCTURE
+        for layer in AI_INFRASTRUCTURE:
+            layer_picks = [p for p in picks if p.layer == layer]
+            if layer_picks:
+                display.print(render_layer_table(layer, layer_picks))
+                display.print()
+
+        display.print(Panel(
+            Markdown(analysis),
+            title="[bold green]AI Infrastructure Intelligence / AI 基础设施情报[/bold green]",
+            border_style="green", padding=(1, 2),
+        ))
         display.print()
         display.print(_SCROLL_HINT)
 
@@ -140,24 +195,29 @@ def run_stocks(briefing_mode: bool = False):
 
 
 def run_whales_only():
-    """Whale tracker only — 6 tabs of smart money intelligence."""
+    """Whale tracker only — 7 tabs of smart money intelligence."""
     console.print(Rule(f"[bold yellow]🐋 Smart Money Tracker — {TODAY}[/bold yellow]"))
     run_whale_tracker()
 
 
 def run_tech_radar():
-    """Full run: whales FIRST, then stocks, then tech briefing."""
+    """Full run: AI infra FIRST, then whales, stocks, then tech briefing."""
 
-    # ── 0. Whale Tracker (has its own pager) ──────────────────────────────────
-    console.print(Rule(f"[bold yellow]🐋 Part 0: Smart Money / Whale Tracker[/bold yellow]"))
+    # ── 0. AI Infrastructure Value Chain (the headline section) ───────────────
+    console.print(Rule(f"[bold green]🛰️  Part 0: AI Infrastructure Value Chain[/bold green]"))
+    ai_infra_analysis = run_ai_infra()
+    console.print()
+
+    # ── 1. Whale Tracker (has its own pager) ──────────────────────────────────
+    console.print(Rule(f"[bold yellow]🐋 Part 1: Smart Money / Whale Tracker[/bold yellow]"))
     run_whale_tracker()
     console.print()
 
-    # ── 1. Stocks (has its own pager) ─────────────────────────────────────────
+    # ── 2. Stocks (has its own pager) ─────────────────────────────────────────
     sector_results, etf_stocks, gems, stock_analysis, headline_analysis = run_stocks(briefing_mode=False)
     console.print()
 
-    # ── 2. Tech Briefing ──────────────────────────────────────────────────────
+    # ── 3. Tech Briefing ──────────────────────────────────────────────────────
     console.print(Rule("[bold cyan]🔭 Tech Radar Briefing[/bold cyan]"))
 
     console.print("[bold]Fetching tech data sources...[/bold]")
@@ -189,6 +249,8 @@ def run_tech_radar():
     output_file = OUTPUT_DIR / f"radar_{TODAY}.md"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(f"# Frontier Tech Radar — {TODAY}\n\n")
+        f.write("## AI Infrastructure Value Chain\n\n")
+        f.write(ai_infra_analysis + "\n\n---\n\n")
         f.write("## Market Intelligence Report\n\n")
         f.write(stock_analysis + "\n\n---\n\n")
         f.write("## Tech Briefing\n\n")
@@ -300,7 +362,7 @@ def run_backtest_mode():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Frontier Tech Radar")
-    parser.add_argument("--mode", choices=["full", "stocks", "briefing", "gems", "whales", "backtest", "email"], default="full")
+    parser.add_argument("--mode", choices=["full", "aii", "stocks", "briefing", "gems", "whales", "backtest", "email"], default="full")
     args = parser.parse_args()
 
     provider = get_provider()
@@ -308,6 +370,7 @@ if __name__ == "__main__":
         console.print("[red]Error: Set GROQ_API_KEY in .env[/red]"); sys.exit(1)
 
     if args.mode == "full":         run_tech_radar()
+    elif args.mode == "aii":        run_ai_infra()
     elif args.mode == "stocks":     run_stocks()
     elif args.mode == "briefing":   run_briefing_only()
     elif args.mode == "gems":       run_gems_only()

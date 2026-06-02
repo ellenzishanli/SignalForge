@@ -1,8 +1,14 @@
 # SignalForge 🔭
 
-**Long-term value investing intelligence platform** — smart money tracking, quantitative stock analysis, and daily tech briefing in one terminal command.
+> **Smart money tracker + quant research terminal.**
+> Follows 20+ top hedge funds via SEC filings. 5-factor quant engine (Kalman filter, Markov chains, Hurst exponent) scoring 150+ stocks across the full AI infrastructure value chain. Congressional & insider trade monitoring. Real-time macro shock alerts. Delivered to your inbox every morning at 7 AM.
 
-Built for investors who want to think like the world's best allocators: **buy great businesses at fair prices and hold**. Not a trading tool. No day-trading signals, no short-term noise. Oriented toward Buffett/Klarman-style fundamental analysis enriched with quant scoring.
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![LLM: Groq](https://img.shields.io/badge/LLM-Groq%20%7C%20Claude%20%7C%20Gemini-purple)](https://console.groq.com)
+[![Data: SEC EDGAR](https://img.shields.io/badge/Data-SEC%20EDGAR%20%7C%20Finviz%20%7C%20Yahoo-orange)](https://www.sec.gov/edgar)
+
+Built for investors who want to think like the world's best allocators: **buy great businesses at fair prices and hold**. Not a trading tool. No day-trading noise. Buffett/Klarman-style fundamental analysis enriched with quant scoring and AI.
 
 > *"The stock market is a device for transferring money from the impatient to the patient."* — Warren Buffett
 
@@ -10,62 +16,66 @@ Built for investors who want to think like the world's best allocators: **buy gr
 
 ## What It Does
 
+### 🛰️ AI Infrastructure Value Chain — Hunt the "Next Micron" (`--mode aii`)
+
+The full **picks-and-shovels stack** behind the AI buildout — ~50 names mapped across every layer, from the chip to the power grid. This is where the next 10x ideas live *before* the market finds them.
+
+| Layer | What it is | Tickers |
+|-------|-----------|---------|
+| 🧠 **Compute Silicon** | GPUs, accelerators, CPUs | NVDA, AMD, AVGO, ARM, MRVL, ALAB |
+| 🏭 **Foundry & Equipment** | The factories making the chips | TSM, ASML, AMAT, LRCX, KLAC |
+| 💾 **Memory & Storage** | HBM, NAND, flash | MU, WDC, STX, SNDK |
+| 🔌 **Networking & Optics** | Moving data at AI speed | ANET, CSCO, CRDO, CIEN, COHR, FN |
+| 🖥️ **Servers & Cooling** | The physical body of AI | SMCI, DELL, HPE, VRT, ETN, MOD |
+| ☁️ **Neoclouds & Data Centers** | GPU cloud landlords | NBIS, CRWV, IREN, APLD, CORZ |
+| ⚡ **Power & Energy** | The fuel (most underpriced layer) | CEG, VST, NEE, GEV, TLN, EQT |
+| 🏛️ **Hyperscalers** | The buyers driving all demand | MSFT, GOOGL, AMZN, META, ORCL |
+
+**Opportunity Score (0–100)** — built to find asymmetric setups *before* re-rating:
+
+```
+Opportunity = Valuation (0–30)   ← GARP + forward P/E
+            + Upside    (0–25)   ← analyst consensus target
+            + Growth    (0–25)   ← revenue + earnings growth
+            + Quant     (0–20)   ← 5-factor quant confirmation
+            − Extended  penalty  ← demotes names up >80% on rich multiples
+```
+
+Labels: **🚀 EMERGING WINNER · 💎 UNDERVALUED · 🔥 HIGH UPSIDE · ⚡ MOMENTUM · ⚠️ EXTENDED**
+Asymmetric "next Micron" setups are flagged ⭐ — high growth, fair value, real upside, not overextended.
+
+```bash
+python3 main.py --mode aii
+```
+
+---
+
 ### 🐋 Whale Tracker — Smart Money Intelligence (`--mode whales`)
 
-Track what the world's best investors are actually buying — pulled directly from SEC filings, congressional disclosures, insider reports, and social signals.
-
-**7 tabs of intelligence:**
+Track what the world's best investors are actually buying — parsed live from SEC filings, congressional disclosures, and social signals. 23 funds, 7 tabs.
 
 | Tab | Source | What you get |
 |-----|--------|-------------|
-| **1–2: Institutional + AI Funds** | SEC 13F filings | Top positions from 16 managers including Ackman, Druckenmiller, Leopold Aschenbrenner, D1 Capital, Whale Rock |
-| **3: Asia Whales** | SEC 13F | Hillhouse Capital, DST Global, SoftBank, GIC Singapore US holdings |
+| **1–2: Institutional + AI Funds** | SEC 13F (live EDGAR parse) | Holdings, QoQ changes, new positions — Berkshire, Bridgewater, Renaissance, Tiger Global, Coatue, D1, Whale Rock, Situational Awareness |
+| **3: Quant Giants** | SEC 13F | Citadel (15,000+ positions), Two Sigma, D.E. Shaw, Point72, WorldQuant |
 | **4: Crypto Whales** | Public disclosures | Saylor/MSTR, a16z, World Liberty Financial, Pantera, Galaxy Digital |
-| **5: Insider Buying** | Finviz | C-suite and director purchases — when executives buy their own stock |
-| **6: Congressional Trades** | QuiverQuant API | Real-time STOCK Act disclosures with verified tickers |
-| **7: Social Intelligence** | StockTwits + Finviz News + SEC RSS | Trending tickers, social sentiment on whale holdings, whale name mentions in headlines, new 13F filing alerts |
+| **5: Insider Buying** | Finviz scraper | C-suite & director purchases — the strongest buy signal that exists |
+| **6: Congressional Trades** | Capitol Trades / QuiverQuant | Real-time STOCK Act disclosures — what politicians are actually buying |
+| **7: Social Intelligence** | StockTwits + Finviz News + SEC RSS | Trending tickers, sentiment on whale holdings, 13F filing alerts |
 
-**Philosophy: value investing, not trading**
-This tool surfaces what long-term, fundamental investors are buying — not momentum signals or day-trade setups. The quant engine weights fundamentals (earnings quality, FCF yield, margin expansion) over short-term technicals. Recommendations are intended for **weeks-to-years** time horizons.
+**Funds tracked — 23 managers across 4 categories:**
 
-**Funds tracked (13F + public disclosures):**
+| Category | Managers |
+|----------|---------|
+| 🏆 Value / Activist | Berkshire · Baupost · Pershing Square · Scion · Third Point · Elliott · Sachem Head |
+| 📈 Growth / Macro | Duquesne · Viking Global · D1 Capital · Durable Capital · Whale Rock · Dragoneer |
+| 🤖 AI / Tech | Situational Awareness (Leopold Aschenbrenner) · Coatue · Tiger Global · ARK |
+| ⚙️ Quant Giants | Bridgewater · Renaissance · Citadel · Point72 · D.E. Shaw · Two Sigma · WorldQuant Millennium |
 
-| Category | Manager | Fund | Known For |
-|----------|---------|------|-----------|
-| 🏆 Value / Activist | Warren Buffett | Berkshire Hathaway | Decade-long holds, AAPL, OXY, BofA |
-| 🏆 Value / Activist | Seth Klarman | Baupost Group | "Margin of Safety", deep value, patient |
-| 🏆 Value / Activist | Bill Ackman | Pershing Square | Concentrated activist, Chipotle, Hilton |
-| 🏆 Value / Activist | Michael Burry | Scion Asset Mgmt | Contrarian, predicted 2008, often early |
-| 🏆 Value / Activist | Dan Loeb | Third Point | Disney/Sony activism, forces change |
-| 🏆 Value / Activist | Scott Ferguson | Sachem Head Capital | Ackman protégé, 8–12 concentrated picks |
-| 📈 Growth / Macro | Stanley Druckenmiller | Duquesne Family Office | 30yr no losing year, macro inflections |
-| 📈 Growth / Macro | Andreas Halvorsen | Viking Global | Tiger Cub, deep tech + healthcare |
-| 📈 Growth / Macro | Dan Sundheim | D1 Capital | Ex-Viking CIO, AMZN/Datadog/Toast early |
-| 📈 Growth / Macro | Henry Ellenbogen | Durable Capital | Multi-year holds, GitLab/Duolingo early |
-| 📈 Growth / Macro | Alex Sacerdote | Whale Rock Capital | Shopify/Snowflake/Cloudflare early |
-| 🤖 AI / Tech | Leopold Aschenbrenner | Situational Awareness LP | Ex-OpenAI, AI infrastructure thesis |
-| 🤖 AI / Tech | Cathie Wood | ARK Investment Mgmt | Disruptive innovation, daily transparency |
-| 🤖 AI / Tech | Philippe Laffont | Coatue Management | Tech L/S Tiger Cub |
-| 🤖 AI / Tech | Chase Coleman | Tiger Global | FB/LinkedIn/Spotify early |
-| ⚙️ Quant Giants | Ray Dalio | Bridgewater Associates | All Weather, macro, $150B |
-| ⚙️ Quant Giants | Jim Simons / Peter Brown | Renaissance Technologies | Best track record ever, Medallion fund |
-| ⚙️ Quant Giants | Ken Griffin | Citadel Advisors | Largest HF by revenue, 27 winning years |
-| ⚙️ Quant Giants | Steve Cohen | Point72 Asset Mgmt | Multi-strat, 120+ pods |
-| ⚙️ Quant Giants | David Shaw | D.E. Shaw & Co. | Systematic + discretionary, early Amazon |
-| ⚙️ Quant Giants | John Overdeck | Two Sigma Advisers | ML/AI systematic, 10,000+ positions |
-| 🪙 Crypto | Michael Saylor | MicroStrategy (MSTR) | 560k+ BTC held, corporate BTC treasury |
-| 🪙 Crypto | Justin Sun (孙宇晨) | TRON / personal | On-chain whale, massive BTC/ETH moves |
-| 🪙 Crypto | Trump / WLF | World Liberty Financial | USD1 stablecoin, political crypto barometer |
-| 🏛️ Congress | via QuiverQuant | STOCK Act | Real-time congressional buy/sell disclosures |
-
-> **Note on Jane Street / investment banks**: their 13F filings reflect client flow and hedges, not investment conviction — excluded by design.
-> **Note on David Tepper (Appaloosa)**: converted to family office in 2019, no longer files public 13F. Track via Bloomberg interviews.
-
-**Recommendation engine:**
-- Positions scored on **novelty** — mega-caps (AAPL/MSFT/NVDA) down-ranked, non-consensus picks from Scion/Situational Awareness/D1/Whale Rock boosted
-- Every ticker enriched with 5-factor quant score (0–100) + follow signal: `⭐⭐⭐ STRONG FOLLOW` → `❌ AVOID`
-- Summary table flags `💡 non-obvious` vs `👥 consensus`
-- **Long-term bias**: quant weights fundamentals over short-term momentum
+Every holding enriched with:
+- **5-factor quant score** → follow signal: `⭐⭐⭐ STRONG FOLLOW` to `❌ AVOID`
+- **QoQ change detection**: NEW BUY / INCREASED / DECREASED / CLOSED
+- **Novelty scoring**: non-consensus picks from Scion/Situational Awareness boosted; mega-cap consensus down-ranked
 
 ```bash
 python3 main.py --mode whales
@@ -73,39 +83,45 @@ python3 main.py --mode whales
 
 ---
 
-### 📈 Stock Analysis (Quant Engine)
-- **5-module scoring system** (each 0–100): Technical · Statistical · ML Trend · Risk · Fundamental
-- Covers **100+ stocks across 10 sectors** + **75 ETFs** (Tech, Bonds, Commodities, International, Real Estate, Factor ETFs)
-- **Hidden Gems scanner**: 30 under-the-radar small/mid-cap names (quantum computing, space, nuclear, biotech, eVTOL)
+### 📈 Sector Scan + Hidden Gems (`--mode stocks`)
 
-### 🧠 Quantitative Methods
+- **5-module quant scoring** (each 0–100): Technical · Statistical · ML Trend · Risk · Fundamental
+- **100+ stocks** across 10 sectors · **75 ETFs** (Tech, Bonds, Commodities, International, Factor, Dividend)
+- **30 Hidden Gems**: quantum computing, space tech, nuclear, biotech, eVTOL — small/mid-cap, under analyst coverage
+
+### 🧠 Quantitative Engine
+
 | Method | What it does |
 |--------|-------------|
+| **Kalman Filter** | Tracks "true" fair value behind noisy price data |
 | **Markov Chain** | Models market regime (BULL/BEAR/SIDEWAYS) via transition probability matrix |
-| **Kalman Filter** | Tracks "true" fair value behind noisy price data (Apollo-era aerospace math applied to stocks) |
-| **Hurst Exponent** | Detects mean-reverting (H<0.5) vs trending (H>0.5) behavior via R/S analysis |
-| **MACD** | Momentum via EMA crossovers + histogram direction |
-| **Stochastic Oscillator** | %K/%D overbought/oversold signal |
-| **ADX** | Trend strength (>25 = developing, >40 = strong) |
-| **OBV** | On-Balance Volume — detects institutional accumulation/distribution |
-| **ATR** | Volatility regime detection (coiling vs expanding) |
-| **Fibonacci Retracements** | Key support/resistance levels from 60-day swing |
-| **Sharpe / Sortino Ratio** | Risk-adjusted return quality |
-| **VaR (99%) + CVaR** | Tail risk measurement |
+| **Hurst Exponent** | Detects mean-reverting (H<0.5) vs trending (H>0.5) via R/S analysis |
+| **MACD / Stochastic / ADX** | Momentum + trend strength signals |
+| **OBV** | On-Balance Volume — detects institutional accumulation |
+| **ATR + Fibonacci** | Volatility regime + key support/resistance levels |
+| **Sharpe / Sortino / VaR** | Risk-adjusted return + tail risk |
 | **Multi-Factor Model** | Value 25% · Growth 30% · Quality 25% · Momentum 20% |
 | **GARP / PEG Ratio** | Growth At Reasonable Price scoring |
-| **Linear Regression Trend** | ML slope, R², velocity, acceleration on price |
+| **Linear Regression ML** | Price slope, R², velocity, acceleration |
 
-### 🔭 Daily Tech Briefing
-- GitHub Trending · TechCrunch/VentureBeat/arXiv RSS · Reddit AI communities · YC companies
-- AI-generated briefing: top startups, research breakthroughs, funding intelligence, non-obvious trends
+### 🚨 Macro Shock Monitor
+
+LLM scans live RSS from Reuters, FT, WSJ, Bloomberg — identifies macro shock events (rate decisions, earnings, geopolitics) and surfaces the immediate trade setup for each.
+
+### 🔭 Daily Tech Briefing (`--mode briefing`)
+
+GitHub Trending · TechCrunch · VentureBeat · arXiv · Reddit AI communities · YC companies → AI-generated bilingual briefing: top startups, research breakthroughs, funding intelligence, non-obvious trends.
+
+### 📧 Daily Email Report (`--mode email`)
+
+Runs the full pipeline and delivers a dark-themed HTML report to your inbox every morning at 7 AM. Includes all sections: AI infra leaderboard, whale tracker summary, market intelligence, macro alerts, and tech briefing — in English and Chinese.
 
 ---
 
 ## Quick Start
 
 ### 1. Get a free LLM API key
-Sign up at [console.groq.com](https://console.groq.com) — free tier, fast, uses Llama 3.3 70B.
+Sign up at [console.groq.com](https://console.groq.com) — free tier, very fast, uses Llama 3.3 70B.
 
 ### 2. Install dependencies
 ```bash
@@ -115,60 +131,66 @@ pip install -r requirements.txt
 ### 3. Configure
 ```bash
 cp .env.example .env
-# Edit .env and add your GROQ_API_KEY
+# Required: GROQ_API_KEY
+# Optional: GMAIL_ADDRESS + GMAIL_APP_PASSWORD for daily email
 ```
 
 ### 4. Run
 ```bash
-# Whale tracker — smart money intelligence
+# AI Infrastructure value chain — hunt the "next Micron"
+python3 main.py --mode aii
+
+# Smart money tracker — 23 hedge funds, 7 tabs
 python3 main.py --mode whales
 
-# Full run: whales + sector scan + hidden gems + ETF + tech briefing
+# Full run: AI infra → whales → sectors → tech briefing
 python3 main.py --mode full
 
-# Stock analysis only (all sectors + ETF + hidden gems)
+# Email mode: full run + deliver to inbox
+python3 main.py --mode email
+
+# Just stocks (sectors + ETFs + hidden gems)
 python3 main.py --mode stocks
 
-# Hidden gems only (fastest, ~1 min)
+# Hidden gems only (~1 min, fastest)
 python3 main.py --mode gems
 
 # Tech briefing only
 python3 main.py --mode briefing
 ```
 
-### 5. Navigate the output
+### 5. Schedule daily 7 AM email
+```bash
+python3 setup_cron.py
+# Installs a cron job: every day at 7:00 AM (America/Los_Angeles)
+# Sends the full report to the Gmail address in your .env
+```
 
-Every mode uses a **built-in scrollable pager** (`less`). Loading and AI analysis run first with live progress in your terminal — then the results open in the pager automatically.
+### 6. Navigate the output
+
+Every mode uses a built-in scrollable pager (`less`).
 
 | Key | Action |
 |-----|--------|
-| `← →` arrow keys | Scroll left/right through wide tables |
-| `↑ ↓` arrow keys or `j` / `k` | Scroll up/down |
-| `G` | Jump to the bottom (Follow Opportunities summary) |
-| `g` | Jump back to the top |
-| `/` then text | Search within the output |
-| `q` | Exit the pager and return to terminal |
-
-> **Tip:** `--mode full` opens 3 sequential pagers — whale tracker → stocks → tech briefing. Press `q` to move from one to the next.
+| `← →` | Scroll horizontally through wide tables |
+| `↑ ↓` or `j` / `k` | Scroll vertically |
+| `G` | Jump to bottom |
+| `g` | Jump to top |
+| `/` then text | Search |
+| `q` | Exit pager |
 
 ---
 
-## Output Example
+## Performance
 
-### Hidden Gems Table
-```
-💎 Hidden Gems & Experimental Picks
-┌──────┬────────────────┬─────────────────────┬──────────┬──────────┬────────┬────────┬─────────┬─────────┬─────────┐
-│Ticker│Category        │Name                 │Price     │Mkt Cap   │1M Ret  │1Y Ret  │Tech/100 │Stat/100 │Signal   │
-├──────┼────────────────┼─────────────────────┼──────────┼──────────┼────────┼────────┼─────────┼─────────┼─────────┤
-│ RKLB │ Space          │ Rocket Lab Corp     │ $143.48  │ $83.1B   │ +86.3% │+396.0% │      53 │      59 │ BUY     │
-│ ASTS │ Space          │ AST SpaceMobile     │ $113.41  │ $44.0B   │ +62.4% │+357.0% │      53 │      57 │ BUY     │
-│ IONQ │ Quantum        │ IonQ Inc            │  $72.07  │  $25.4B  │ +35.0% │+576.0% │      47 │      30 │ HOLD    │
-└──────┴────────────────┴─────────────────────┴──────────┴──────────┴────────┴────────┴─────────┴─────────┴─────────┘
-```
+All data fetches run on a **concurrent thread pool** — stocks, ETFs, and whale holdings are fetched in parallel, not sequentially. SEC EDGAR requests go through a global rate limiter (8 req/s, under EDGAR's 10 req/s fair-access ceiling).
 
-### Bilingual AI Analysis
-Every report generates a complete English analysis followed by a full Chinese translation — same structure, same depth.
+| Task | Before | After |
+|------|--------|-------|
+| 100+ sector stocks | ~3 min | **~25s** |
+| 75 ETFs | ~90s | **~8s** |
+| 23 hedge fund 13F filings | ~45s | **~12s** |
+| 30 hidden gems | ~60s | **~7s** |
 
 ---
 
@@ -176,40 +198,45 @@ Every report generates a complete English analysis followed by a full Chinese tr
 
 ```
 signalforge/
-├── main.py                     # Entry point (4 modes)
+├── main.py                     # Entry point — 7 modes
 ├── config/
-│   ├── universe.py             # Stock universe: 10 sectors, 75 ETFs, 30 hidden gems
+│   ├── universe.py             # AI infra value chain + 10 sectors + 75 ETFs + 30 hidden gems
+│   ├── whales.py               # 23-fund registry with CIKs, styles, known-for
 │   └── settings.py             # Screener thresholds, signal weights
 ├── stocks/
-│   ├── quant.py                # Master quant engine (5 sub-scores)
+│   ├── ai_infrastructure.py    # AI infra value-chain scanner + Opportunity Score engine
+│   ├── parallel.py             # Thread-pool helper — concurrent ticker fetches
+│   ├── quant.py                # Master quant engine (5 sub-scores, 0–100)
 │   ├── technical.py            # MACD, Stochastic, ATR, OBV, Fibonacci, ADX
 │   ├── risk_metrics.py         # Sharpe, Sortino, VaR, CVaR, Beta, ML trend
-│   ├── sector_scan.py          # Sector-by-sector scanner + ETF table
+│   ├── sector_scan.py          # Sector scanner + ETF table
 │   ├── hidden_gems.py          # Small/mid-cap experimental picks
 │   ├── screener.py             # Discount buy signals + GARP value picks
-│   └── data_enrichment.py      # Finviz scraper (short interest, analyst ratings)
+│   ├── backtest.py             # Walk-forward backtester + OLS weight optimization
+│   └── data_enrichment.py      # Finviz scraper — short interest, analyst ratings
 ├── whales/
-│   ├── whale_display.py        # Main whale tracker (7 tabs, quant enrichment, novelty ranking)
-│   ├── sec_13f.py              # SEC EDGAR 13F parser (submissions → XML → holdings)
-│   └── social_signals.py       # QuiverQuant, Finviz Insider, StockTwits, news scanner
-├── config/
-│   └── whales.py               # Fund registry: 16 managers with CIKs, styles, known-for
+│   ├── whale_display.py        # Whale tracker — 7 tabs, quant enrichment, novelty ranking
+│   ├── sec_13f.py              # SEC EDGAR 13F parser — rate-limited, parallel, no re-downloads
+│   └── social_signals.py       # Congressional trades, insider buying, StockTwits, news
 ├── scrapers/
 │   ├── github_trending.py      # GitHub Trending
 │   ├── feeds.py                # TechCrunch, VentureBeat, arXiv RSS
 │   ├── reddit_ai.py            # Reddit AI communities
-│   └── yc.py                   # YC company directory
+│   ├── yc.py                   # YC company directory
+│   └── macro_news.py           # Reuters, FT, WSJ macro headlines
 ├── analysis/
-│   ├── ai_analyst.py           # Sell-side style bilingual AI reports
-│   └── llm_client.py           # Multi-provider LLM client
+│   ├── ai_analyst.py           # Sell-side style bilingual AI reports (EN + 中文)
+│   ├── llm_client.py           # Multi-provider LLM client — Groq, Claude, Gemini, Ollama
+│   ├── headline_trades.py      # Macro shock → trade idea LLM analysis
+│   └── emailer.py              # Dark-themed HTML email via Gmail SMTP
+├── run_daily.sh                # Cron entry point
+├── setup_cron.py               # One-command cron installer (7 AM daily)
 └── output/                     # Daily reports saved as Markdown
 ```
 
 ---
 
 ## LLM Providers
-
-Supports multiple providers — switch via `.env`:
 
 | Provider | Cost | Model | Setup |
 |----------|------|-------|-------|
@@ -219,46 +246,34 @@ Supports multiple providers — switch via `.env`:
 | Ollama | Local/free | Any local model | [ollama.com](https://ollama.com) |
 
 ```env
-# .env
 LLM_PROVIDER=groq
 GROQ_API_KEY=your_key_here
+
+# Optional — for daily email delivery
+GMAIL_ADDRESS=you@gmail.com
+GMAIL_APP_PASSWORD=your_16_char_app_password
 ```
 
 ---
 
-## Sector Coverage
+## For VC / PE / Finance / Quant Careers
 
-| Sector | Example Tickers |
-|--------|----------------|
-| AI & Compute Infrastructure | NVDA, AMD, ARM, AVGO, MRVL |
-| Cloud & Software Platform | MSFT, GOOGL, SNOW, NET, PLTR |
-| Clean Energy & Solar | ENPH, FSLR, NEE, PLUG |
-| Nuclear & Grid Storage | CEG, OKLO, SMR, NNE |
-| Defense & Aerospace | LMT, RTX, KTOS, RKLB, ASTS |
-| Biotech & Healthcare AI | RXRX, SDGR, CRSP, BEAM |
-| Fintech & Crypto | COIN, UPST, AFRM, HOOD |
-| Robotics & Autonomous | TSLA, PATH, JOBY, ACHR |
-| Semiconductor Equipment | AMAT, ASML, KLAC, LRCX |
-| Data Infrastructure | PSTG, CRWD, PANW, ZS |
+This project demonstrates end-to-end financial engineering skills:
 
-Plus **75 ETFs** across: Tech themes · S&P 500 sectors · Bonds (TLT/HYG/AGG) · Commodities (GLD/USO) · International (EEM/FXI/INDA) · Real Estate (VNQ) · Factor (MTUM/QUAL/USMV) · Dividend (SCHD/VYM)
-
----
-
-## For VC/PE/Finance Careers
-
-This project demonstrates:
-- **Quantitative methods**: Markov chains, Kalman filtering, Hurst exponent, multi-factor models
-- **Financial analysis**: GARP valuation, sell-side research format, scenario analysis
-- **Data engineering**: multi-source scraping (Yahoo Finance, Finviz, SEC EDGAR, RSS feeds)
-- **AI integration**: LLM-powered analysis with multi-provider support
-- **Systems design**: modular architecture, CLI tooling, automated reporting
+| Skill | Implementation |
+|-------|---------------|
+| **Quantitative finance** | Kalman filter, Markov chains, Hurst exponent, Sharpe/Sortino/VaR, multi-factor models, GARP/PEG |
+| **Data engineering** | Multi-source scraping: SEC EDGAR, Finviz, Yahoo Finance, StockTwits, Reddit, GitHub, RSS |
+| **Systems design** | Concurrent architecture, global rate limiting, modular CLI, automated scheduling |
+| **AI/LLM integration** | Multi-provider LLM client, bilingual sell-side research, macro event analysis |
+| **Financial analysis** | 13F parsing, QoQ change detection, congressional trade monitoring, insider signal tracking |
+| **Investment research** | Value-chain mapping, opportunity scoring, novelty ranking, sector rotation framework |
 
 ---
 
 ## Disclaimer
 
-This tool is for **educational and research purposes only**. It does not constitute investment advice. All quantitative models have inherent limitations. Always do your own due diligence before making investment decisions.
+For **educational and research purposes only**. Not investment advice. All models have inherent limitations. Do your own due diligence.
 
 ---
 

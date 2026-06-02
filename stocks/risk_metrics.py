@@ -122,34 +122,44 @@ class VolatilityRegime:
 
 # ── SPY Cache ─────────────────────────────────────────────────────────────────
 
+import threading
+
 _SPY_RETURNS_CACHE: Optional[pd.Series] = None
 _VIX_RETURNS_CACHE: Optional[pd.Series] = None
+# Guards so concurrent scan threads download the SPY/VIX benchmark exactly once
+# instead of each racing to fetch it on a cold cache.
+_SPY_LOCK = threading.Lock()
+_VIX_LOCK = threading.Lock()
 
 
 def _get_spy_returns() -> pd.Series:
     global _SPY_RETURNS_CACHE
     if _SPY_RETURNS_CACHE is not None:
         return _SPY_RETURNS_CACHE
-    try:
-        import yfinance as yf
-        spy = yf.Ticker("SPY").history(period="14mo")["Close"].pct_change().dropna()
-        _SPY_RETURNS_CACHE = spy
-        return spy
-    except Exception:
-        return pd.Series(dtype=float)
+    with _SPY_LOCK:
+        if _SPY_RETURNS_CACHE is not None:
+            return _SPY_RETURNS_CACHE
+        try:
+            import yfinance as yf
+            _SPY_RETURNS_CACHE = yf.Ticker("SPY").history(period="14mo")["Close"].pct_change().dropna()
+        except Exception:
+            _SPY_RETURNS_CACHE = pd.Series(dtype=float)
+        return _SPY_RETURNS_CACHE
 
 
 def _get_vix_returns() -> pd.Series:
     global _VIX_RETURNS_CACHE
     if _VIX_RETURNS_CACHE is not None:
         return _VIX_RETURNS_CACHE
-    try:
-        import yfinance as yf
-        vix = yf.Ticker("^VIX").history(period="14mo")["Close"].pct_change().dropna()
-        _VIX_RETURNS_CACHE = vix
-        return vix
-    except Exception:
-        return pd.Series(dtype=float)
+    with _VIX_LOCK:
+        if _VIX_RETURNS_CACHE is not None:
+            return _VIX_RETURNS_CACHE
+        try:
+            import yfinance as yf
+            _VIX_RETURNS_CACHE = yf.Ticker("^VIX").history(period="14mo")["Close"].pct_change().dropna()
+        except Exception:
+            _VIX_RETURNS_CACHE = pd.Series(dtype=float)
+        return _VIX_RETURNS_CACHE
 
 
 # ── Risk Metrics ──────────────────────────────────────────────────────────────

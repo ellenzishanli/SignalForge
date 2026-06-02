@@ -15,6 +15,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.universe import SECTORS, AI_ETFS
 from stocks.quant import build_quant_report, QuantReport, format_quant_one_liner
+from stocks.parallel import parallel_fetch
 
 console = Console(width=280)
 
@@ -129,16 +130,23 @@ def scan_all_sectors(sectors: Dict[str, List[str]] = None, top_n: int = 5) -> Di
     results: Dict[str, List[SectorStock]] = {}
     all_stocks: List[SectorStock] = []
 
-    for sector_name, tickers in sectors.items():
-        sector_stocks = []
-        with console.status(f"  Scanning {sector_name} ({len(tickers)} stocks)..."):
-            for ticker in tickers:
-                s = fetch_sector_stock(ticker, sector_name)
-                if s:
-                    sector_stocks.append(s)
-                    all_stocks.append(s)
+    # Flatten to (ticker, sector) pairs and fetch every stock concurrently —
+    # one shared thread pool across all sectors maximizes overlap of the
+    # network waits instead of draining one sector before starting the next.
+    jobs = [(ticker, name) for name, tickers in sectors.items() for ticker in tickers]
+    total = len(jobs)
+    with console.status(f"  Scanning {len(sectors)} sectors ({total} stocks) in parallel...") as status:
+        def _progress(done, tot):
+            status.update(f"  Scanning {len(sectors)} sectors... {done}/{tot} stocks loaded")
+        all_stocks = parallel_fetch(
+            jobs,
+            lambda job: fetch_sector_stock(job[0], job[1]),
+            progress=_progress,
+        )
 
-        # Sort by quant score descending
+    # Bucket back into sectors, then keep the top N per sector by quant score.
+    for sector_name in sectors:
+        sector_stocks = [s for s in all_stocks if s.sector_label == sector_name]
         sector_stocks.sort(
             key=lambda x: x.quant.overall_quant_score if x.quant else 0,
             reverse=True
@@ -151,13 +159,17 @@ def scan_all_sectors(sectors: Dict[str, List[str]] = None, top_n: int = 5) -> Di
 
 def scan_etfs() -> List[SectorStock]:
     """Scan all ETFs in universe."""
-    etf_stocks = []
-    with console.status("  Scanning ETFs..."):
-        for ticker, name in AI_ETFS:
-            s = fetch_sector_stock(ticker, "ETF")
-            if s:
-                s.name = name  # use our readable name
-                etf_stocks.append(s)
+    name_by_ticker = dict(AI_ETFS)
+    with console.status(f"  Scanning {len(AI_ETFS)} ETFs in parallel...") as status:
+        def _progress(done, tot):
+            status.update(f"  Scanning ETFs... {done}/{tot} loaded")
+        etf_stocks = parallel_fetch(
+            [t for t, _ in AI_ETFS],
+            lambda ticker: fetch_sector_stock(ticker, "ETF"),
+            progress=_progress,
+        )
+    for s in etf_stocks:
+        s.name = name_by_ticker.get(s.ticker, s.name)  # use our readable name
     etf_stocks.sort(key=lambda x: x.quant.overall_quant_score if x.quant else 0, reverse=True)
     return etf_stocks
 

@@ -15,6 +15,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.universe import HIDDEN_GEMS as HIDDEN_GEM_TICKERS
 from stocks.quant import build_quant_report, QuantReport
+from stocks.parallel import parallel_fetch
 
 console = Console(width=280)
 
@@ -197,12 +198,10 @@ def scan_hidden_gems(tickers: List[str] = None) -> List[HiddenGem]:
     if tickers is None:
         tickers = HIDDEN_GEM_TICKERS
 
-    gems = []
-    with console.status("[cyan]Scanning hidden gems universe...[/cyan]"):
-        for ticker in tickers:
-            g = fetch_hidden_gem(ticker)
-            if g:
-                gems.append(g)
+    with console.status("[cyan]Scanning hidden gems universe...[/cyan]") as status:
+        def _progress(done, tot):
+            status.update(f"[cyan]Scanning hidden gems... {done}/{tot} loaded[/cyan]")
+        gems = parallel_fetch(tickers, fetch_hidden_gem, progress=_progress)
 
     gems.sort(key=lambda x: x.quant.overall_quant_score if x.quant else 0, reverse=True)
     return gems

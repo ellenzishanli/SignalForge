@@ -2,7 +2,7 @@
 SEC EDGAR 13F Parser — Institutional Holdings Tracker
 Uses the correct EDGAR API flow: submissions → accession → filing index → XML
 """
-import requests, time, re, json
+import requests, time, re, json, threading
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
 from bs4 import BeautifulSoup
@@ -15,6 +15,37 @@ WEB_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+
+
+# ── Global SEC rate limiter ───────────────────────────────────────────────────
+# SEC EDGAR's fair-access policy caps clients at 10 requests/second. Once we fetch
+# funds concurrently, many threads issue requests at once, so a *global* limiter
+# (shared across all threads) is required to stay compliant. We target 8 req/s to
+# leave headroom. Each thread reserves its slot under the lock, then sleeps to it
+# outside the lock so threads don't serialize on each other's waits.
+class _RateLimiter:
+    def __init__(self, max_per_sec: float):
+        self._min_interval = 1.0 / max_per_sec
+        self._lock = threading.Lock()
+        self._next_slot = 0.0
+
+    def acquire(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self._min_interval
+        wait = slot - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+
+
+_SEC_RATE = _RateLimiter(8.0)
+
+
+def _sec_get(url: str, headers: dict = None, timeout: int = 12) -> requests.Response:
+    """All requests to SEC hosts go through here so the global rate limiter applies."""
+    _SEC_RATE.acquire()
+    return requests.get(url, headers=headers or HEADERS, timeout=timeout)
 
 
 @dataclass
@@ -46,7 +77,7 @@ def _get_13f_info_list(cik: str, max_count: int = 4) -> List[dict]:
     url = f"https://data.sec.gov/submissions/CIK{cik_padded}.json"
     results = []
     try:
-        r = requests.get(url, headers=HEADERS, timeout=12)
+        r = _sec_get(url, timeout=12)
         r.raise_for_status()
         data = r.json()
         filings = data.get("filings", {}).get("recent", {})
@@ -77,38 +108,20 @@ def _get_latest_13f_info(cik: str) -> Optional[dict]:
 
 # ── Step 2: Get filing index → find correct XML filename ─────────────────────
 
-def _get_xml_filename(cik_int: str, accession: str) -> Optional[str]:
-    """Look at the filing index page to find the infotable XML file."""
-    index_url = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession}/{accession}-index.htm"
-    try:
-        r = requests.get(index_url, headers=HEADERS, timeout=12)
-        if r.status_code != 200:
-            # try json index
-            idx_url2 = f"https://data.sec.gov/submissions/CIK{cik_int.zfill(10)}.json"
-            return None
-        soup = BeautifulSoup(r.text, "html.parser")
-        for link in soup.find_all("a", href=True):
-            href = link["href"].lower()
-            if any(x in href for x in ["infotable", "form13f", "informationtable"]) and href.endswith(".xml"):
-                return link["href"].split("/")[-1]
-    except Exception:
-        pass
-    # Common fallback names
-    return None
-
-
-def _try_xml_names(cik_int: str, accession: str) -> Optional[str]:
+def _try_xml_names(cik_int: str, accession: str) -> Optional[tuple]:
     """
-    Find the correct XML file in a 13F filing.
-    Strategy: fetch the directory index, collect ALL .xml links,
-    then pick the one containing <infoTable> (the holdings table).
+    Find the correct XML file in a 13F filing and return ``(url, xml_text)``.
+    Strategy: fetch the directory index, collect ALL .xml links, prioritize the
+    ones that look like the holdings table, and return the first that actually
+    contains <infoTable> — along with its already-downloaded text so the caller
+    doesn't fetch it twice.
     """
     base = f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession}/"
 
     # Step 1: Get the filing directory index
     xml_candidates = []
     try:
-        idx = requests.get(base, headers=HEADERS, timeout=10)
+        idx = _sec_get(base, timeout=10)
         if idx.status_code == 200:
             soup = BeautifulSoup(idx.text, "html.parser")
             for link in soup.find_all("a", href=True):
@@ -125,18 +138,26 @@ def _try_xml_names(cik_int: str, accession: str) -> Optional[str]:
     except Exception as e:
         print(f"  [13F] index error: {e}")
 
-    # Also try common hardcoded names as fallback
-    for name in ["infotable.xml", "form13fInfoTable.xml", "informationtable.xml"]:
-        xml_candidates.append(base + name)
+    # Prioritize files whose name looks like the holdings table so we usually hit
+    # it on the first try (primary_doc.xml is the cover page, not the holdings).
+    def _looks_like_infotable(url: str) -> int:
+        low = url.lower()
+        return 0 if any(k in low for k in ("infotable", "form13f", "informationtable", "table")) else 1
+    xml_candidates.sort(key=_looks_like_infotable)
 
-    # Step 2: Try each XML — return the first one containing <infoTable>
+    # Only fall back to guessed filenames if the index gave us nothing — otherwise
+    # these are just guaranteed 404s that burn our rate-limit budget.
+    if not xml_candidates:
+        xml_candidates = [base + n for n in
+                          ("infotable.xml", "form13fInfoTable.xml", "informationtable.xml")]
+
+    # Step 2: Return the first XML that actually contains the holdings table —
+    # AND its text, so the caller doesn't have to download it a second time.
     for url in xml_candidates:
         try:
-            r = requests.get(url, headers=HEADERS, timeout=10)
-            if r.status_code == 200:
-                text = r.text
-                if "infoTable" in text or "infotable" in text.lower():
-                    return url
+            r = _sec_get(url, timeout=10)
+            if r.status_code == 200 and "infotable" in r.text.lower():
+                return url, r.text
         except Exception:
             continue
 
@@ -184,15 +205,24 @@ CUSIP_TICKER = {
 
 # Lazy-loaded name→ticker map built from SEC company_tickers.json
 _NAME_TICKER_CACHE: dict = {}
+_NAME_TICKER_LOCK = threading.Lock()
 
 def _get_name_ticker_map() -> dict:
     """Load SEC's company_tickers.json and build normalised name→ticker map."""
     global _NAME_TICKER_CACHE
     if _NAME_TICKER_CACHE:
         return _NAME_TICKER_CACHE
+    # Guard so concurrent fund threads don't each fetch the large JSON.
+    with _NAME_TICKER_LOCK:
+        if _NAME_TICKER_CACHE:
+            return _NAME_TICKER_CACHE
+        return _build_name_ticker_map()
+
+
+def _build_name_ticker_map() -> dict:
+    global _NAME_TICKER_CACHE
     try:
-        r = requests.get("https://www.sec.gov/files/company_tickers.json",
-                         headers=HEADERS, timeout=10)
+        r = _sec_get("https://www.sec.gov/files/company_tickers.json", timeout=10)
         if r.status_code == 200:
             for v in r.json().values():
                 name = v.get("title", "").upper().strip()
@@ -279,15 +309,14 @@ def _parse_xml(xml_text: str) -> List[Holding]:
 
 def _fetch_filing(info: dict, entity_name: str, cik: str) -> Optional[Filing13F]:
     """Fetch and parse a single 13F filing given its info dict."""
-    xml_url = _try_xml_names(info["cik_int"], info["accession"])
-    if not xml_url:
+    found = _try_xml_names(info["cik_int"], info["accession"])
+    if not found:
         return Filing13F(entity_name=entity_name, cik=cik,
                          period=info["period"], filed_date=info["filed_date"],
                          total_value_usd=0)
     try:
-        r = requests.get(xml_url, headers=HEADERS, timeout=15)
-        r.raise_for_status()
-        holdings = _parse_xml(r.text)
+        _xml_url, xml_text = found  # text already fetched during location — no re-download
+        holdings = _parse_xml(xml_text)
         total = sum(h.value_usd for h in holdings)
         # Compute % of portfolio for each holding
         for h in holdings:
@@ -308,7 +337,6 @@ def fetch_13f(entity_name: str, cik: str, top_n: int = 60) -> Optional[Filing13F
     if not infos:
         print(f"  [13F] No 13F found for {entity_name}")
         return None
-    time.sleep(0.25)
     filing = _fetch_filing(infos[0], entity_name, cik)
     if filing and filing.holdings:
         print(f"  [13F] ✓ {entity_name}: {len(filing.holdings)} holdings, "
@@ -330,7 +358,6 @@ def fetch_13f_with_changes(entity_name: str, cik: str, top_n: int = 60) -> Optio
         print(f"  [13F] No 13F found for {entity_name}")
         return None
 
-    time.sleep(0.25)
     current = _fetch_filing(infos[0], entity_name, cik)
     if not current or not current.holdings:
         return current
@@ -338,7 +365,6 @@ def fetch_13f_with_changes(entity_name: str, cik: str, top_n: int = 60) -> Optio
     # Build previous quarter CUSIP → value map
     prev_values: Dict[str, int] = {}
     if len(infos) > 1:
-        time.sleep(0.25)
         prev = _fetch_filing(infos[1], entity_name, cik)
         if prev and prev.holdings:
             prev_values = {h.cusip: h.value_usd for h in prev.holdings}

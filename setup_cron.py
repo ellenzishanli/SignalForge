@@ -1,33 +1,62 @@
 #!/usr/bin/env python3
 """
-Set up daily cron job for Frontier Tech Radar.
-Runs Mon-Fri at 7:30 AM.
+Install (or update) the SignalForge daily cron job.
+
+Schedule: every day at 7:00 AM America/Los_Angeles (PDT/PST automatic).
+Action:   run_daily.sh → main.py --mode email
+            = AI infra scan + whale tracker + full sector scan + tech briefing
+              → saves report to output/ → emails HTML report to configured address
+
+Run this script once to install. Re-run at any time to update or verify.
+Idempotent — clears stale SignalForge entries before writing the new one.
 """
 import subprocess
-import os
+import sys
+from pathlib import Path
 
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-PYTHON = subprocess.run(["which", "python3"], capture_output=True, text=True).stdout.strip()
-LOG_DIR = os.path.join(PROJECT_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
+PROJECT_DIR = Path(__file__).resolve().parent
+RUNNER      = PROJECT_DIR / "run_daily.sh"
+LOG_DIR     = PROJECT_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
+# 7:00 AM every day. cron uses the system timezone — this machine is already
+# set to America/Los_Angeles, so no TZ prefix needed.
 CRON_LINE = (
-    f"30 7 * * 1-5 cd {PROJECT_DIR} && "
-    f"{PYTHON} {PROJECT_DIR}/main.py --mode full "
+    f"0 7 * * * "
+    f"cd {PROJECT_DIR} && bash {RUNNER} "
     f">> {LOG_DIR}/cron.log 2>&1"
 )
 
+# ── Read existing crontab ──────────────────────────────────────────────────────
 result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
 existing = result.stdout if result.returncode == 0 else ""
 
-if CRON_LINE in existing:
-    print("✅ Cron job already installed.")
+# Remove any previous SignalForge / Frontier Tech Radar lines so we don't
+# accumulate stale entries on repeated runs.
+filtered = "\n".join(
+    line for line in existing.splitlines()
+    if "signalforge" not in line.lower()
+    and "frontier" not in line.lower()
+    and str(RUNNER) not in line
+    and "main.py" not in line
+)
+
+new_crontab = filtered.rstrip() + "\n" + CRON_LINE + "\n"
+
+proc = subprocess.run(["crontab", "-"], input=new_crontab, text=True, capture_output=True)
+if proc.returncode != 0:
+    print(f"❌ Failed to install cron job: {proc.stderr.strip()}")
+    print(f"\nManual setup — run:  crontab -e  and add:\n  {CRON_LINE}")
+    sys.exit(1)
+
+# ── Verify ─────────────────────────────────────────────────────────────────────
+verify = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+if str(RUNNER) in verify.stdout:
+    print("✅ SignalForge daily email scheduled.")
+    print(f"   Time  : 7:00 AM every day  (America/Los_Angeles — PDT/PST auto)")
+    print(f"   What  : AI infra + whales + sectors + tech briefing → email")
+    print(f"   Email : ellenli0208@gmail.com")
+    print(f"   Logs  : {LOG_DIR}/cron.log")
+    print(f"\n   Cron line:\n     {CRON_LINE}")
 else:
-    new_crontab = existing.rstrip() + "\n" + CRON_LINE + "\n"
-    proc = subprocess.run(["crontab", "-"], input=new_crontab, text=True)
-    if proc.returncode == 0:
-        print(f"✅ Cron job installed: runs Mon-Fri at 7:30 AM")
-        print(f"   Logs: {LOG_DIR}/cron.log")
-    else:
-        print("❌ Failed to install cron job.")
-        print(f"Manual setup — add this to crontab -e:\n{CRON_LINE}")
+    print("⚠️  Installed but not found in verification — run: crontab -l")

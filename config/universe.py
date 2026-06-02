@@ -129,6 +129,93 @@ SECTORS = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
+# AI INFRASTRUCTURE VALUE CHAIN
+# ══════════════════════════════════════════════════════════════════════════════
+# The full "picks-and-shovels" stack behind the AI buildout — organized top-of-
+# stack (closest to the chip) down to the power layer that feeds it. This is the
+# universe to hunt the "next Micron" in: companies still at fair/moderate
+# valuations with strong growth and real analyst upside, BEFORE they re-rate.
+# Each entry is (ticker, readable name). Ordered by layer.
+
+AI_INFRASTRUCTURE = {
+    "🧠 Compute Silicon — GPUs / Accelerators / CPUs": [
+        ("NVDA", "Nvidia"),
+        ("AMD",  "Advanced Micro Devices"),
+        ("AVGO", "Broadcom"),
+        ("ARM",  "Arm Holdings"),
+        ("MRVL", "Marvell Technology"),
+        ("ALAB", "Astera Labs — AI connectivity silicon"),
+        ("INTC", "Intel"),
+        ("QCOM", "Qualcomm"),
+    ],
+
+    "🏭 Foundry & Semi Equipment — the factories": [
+        ("TSM",  "Taiwan Semiconductor (TSMC)"),
+        ("ASML", "ASML — EUV lithography monopoly"),
+        ("AMAT", "Applied Materials"),
+        ("LRCX", "Lam Research"),
+        ("KLAC", "KLA Corporation"),
+    ],
+
+    "💾 Memory & Storage": [
+        ("MU",   "Micron Technology — HBM for AI"),
+        ("WDC",  "Western Digital"),
+        ("STX",  "Seagate Technology"),
+        ("SNDK", "SanDisk — NAND flash"),
+    ],
+
+    "🔌 Networking & Optics — the nervous system": [
+        ("ANET", "Arista Networks"),
+        ("CSCO", "Cisco Systems"),
+        ("CRDO", "Credo Technology — active copper"),
+        ("CIEN", "Ciena — optical transport"),
+        ("COHR", "Coherent — optical/laser"),
+        ("LITE", "Lumentum — optical transceivers"),
+        ("FN",   "Fabrinet — optical manufacturing"),
+    ],
+
+    "🖥️ Servers, Cooling & Power Gear — the body": [
+        ("SMCI", "Super Micro Computer"),
+        ("DELL", "Dell Technologies"),
+        ("HPE",  "Hewlett Packard Enterprise"),
+        ("VRT",  "Vertiv — thermal & power management"),
+        ("ETN",  "Eaton — electrical/power"),
+        ("MOD",  "Modine — liquid cooling"),
+    ],
+
+    "☁️ Neoclouds & AI Data Centers — the landlords": [
+        ("NBIS", "Nebius Group — AI cloud"),
+        ("CRWV", "CoreWeave — GPU cloud"),
+        ("IREN", "IREN — AI data centers"),
+        ("APLD", "Applied Digital — HPC hosting"),
+        ("CIFR", "Cipher Mining — HPC pivot"),
+        ("CORZ", "Core Scientific — AI/HPC"),
+        ("WULF", "TeraWulf — HPC hosting"),
+    ],
+
+    "⚡ Power & Energy — the fuel": [
+        ("CEG",  "Constellation Energy — largest US nuclear"),
+        ("VST",  "Vistra — nuclear + thermal"),
+        ("NEE",  "NextEra Energy"),
+        ("GEV",  "GE Vernova — grid & turbines"),
+        ("TLN",  "Talen Energy — nuclear to data centers"),
+        ("EQT",  "EQT Corp — natural gas"),
+        ("OKLO", "Oklo — micro reactors"),
+        ("SMR",  "NuScale Power — SMRs"),
+        ("EOSE", "Eos Energy — grid storage"),
+    ],
+
+    "🏛️ Hyperscalers — the buyers (demand side)": [
+        ("MSFT", "Microsoft"),
+        ("GOOGL","Alphabet"),
+        ("AMZN", "Amazon"),
+        ("META", "Meta Platforms"),
+        ("ORCL", "Oracle"),
+    ],
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # FULL ETF UNIVERSE — all sectors, not just tech
 # ══════════════════════════════════════════════════════════════════════════════
 
