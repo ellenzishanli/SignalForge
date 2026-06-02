@@ -154,7 +154,7 @@ def run_tech_radar():
     console.print()
 
     # ── 1. Stocks (has its own pager) ─────────────────────────────────────────
-    sector_results, etf_stocks, gems, stock_analysis, _headline_analysis = run_stocks(briefing_mode=False)
+    sector_results, etf_stocks, gems, stock_analysis, headline_analysis = run_stocks(briefing_mode=False)
     console.print()
 
     # ── 2. Tech Briefing ──────────────────────────────────────────────────────
@@ -194,6 +194,7 @@ def run_tech_radar():
         f.write("## Tech Briefing\n\n")
         f.write(briefing + "\n")
     console.print(f"\n[bold green]✅ Report saved: {output_file}[/bold green]")
+    return headline_analysis
 
 
 def run_gems_only():
@@ -265,14 +266,8 @@ def run_email_mode():
     console.print(Rule(f"[bold blue]📧 Email Report Mode — {TODAY}[/bold blue]"))
 
     # Full pipeline — saves report to output/radar_{TODAY}.md
-    run_tech_radar()
-
-    # Standalone headline trades (run_tech_radar already ran stocks which
-    # fetches headlines internally, but we want a fresh standalone panel here
-    # for the email; use the already-computed analysis if possible)
-    console.print()
-    console.print(Rule("[bold red]🚨 Running Standalone Headline Trades for Email[/bold red]"))
-    headline_trades_text = run_headline_trades()
+    # headline analysis already runs inside run_stocks() → run_tech_radar()
+    headline_trades_text = run_tech_radar()
 
     # Read the saved report
     output_file = OUTPUT_DIR / f"radar_{TODAY}.md"

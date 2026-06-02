@@ -349,8 +349,9 @@ def build_sector_context_for_ai(
                 if qr else f"{s.ticker}: ${s.current_price} | 1Y {s.return_1y:+.1f}%"
             )
 
-    lines.append("\n=== ETF LANDSCAPE ===")
-    for s in etf_stocks:
+    lines.append("\n=== ETF LANDSCAPE (top 20 by quant score) ===")
+    top_etfs = sorted(etf_stocks, key=lambda s: s.quant.overall_quant_score if s.quant else 0, reverse=True)[:20]
+    for s in top_etfs:
         qr = s.quant
         lines.append(
             f"{s.ticker} ({s.name}): ${s.current_price} | "
@@ -359,8 +360,9 @@ def build_sector_context_for_ai(
             if qr else f"{s.ticker}: {s.return_1y:+.1f}%"
         )
 
-    lines.append("\n=== HIDDEN GEMS ===")
-    for g in hidden_gems:
+    lines.append("\n=== HIDDEN GEMS (top 12 by quant score) ===")
+    top_gems = sorted(hidden_gems, key=lambda g: g.quant.overall_quant_score if g.quant else 0, reverse=True)[:12]
+    for g in top_gems:
         qr = g.quant
         short_flag = f" | SHORT_INT={g.short_interest_pct:.0f}%" if g.short_interest_pct and g.short_interest_pct > 10 else ""
         lines.append(
