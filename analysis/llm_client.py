@@ -6,6 +6,8 @@ Unified LLM client supporting multiple free/paid providers.
 通过 .env 中的 LLM_PROVIDER 来切换 / Set LLM_PROVIDER in .env to override.
 """
 import os
+from dotenv import load_dotenv
+load_dotenv()   # ensure .env is loaded regardless of how this module is imported
 
 
 def get_provider() -> str:
