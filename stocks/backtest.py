@@ -29,6 +29,11 @@ BACKTEST_TICKERS = [
 # Price-only composite weights (no fundamental — no historical data available)
 PRICE_WEIGHTS = {"tech": 0.25, "stat": 0.35, "ml": 0.25, "risk": 0.15}
 
+# Assumed round-trip transaction cost per monthly rebalance (commission + spread +
+# slippage), in % of notional. A monthly-rebalanced book pays this every period,
+# so net performance is what actually matters — gross Sharpe flatters the model.
+TXN_COST_ROUNDTRIP_PCT = 0.20
+
 # Signal thresholds (match quant.py convention)
 def _score_to_signal(score: float) -> str:
     if   score >= 72: return "STRONG_BUY"
@@ -348,10 +353,16 @@ def run_backtest_and_display(console=None):
         )
         strategy_mean_ret = round(float(buy_plus["fwd_ret"].mean()), 2)
         strategy_win_rate = round(float((buy_plus["fwd_ret"] > 0).mean() * 100), 1)
+        # Net of transaction costs: subtract a round-trip cost from each period.
+        net_excess = strategy_excess - TXN_COST_ROUNDTRIP_PCT
+        strategy_sharpe_net = round(float(net_excess.mean() / (net_excess.std() + 1e-9) * ann_factor), 2)
+        strategy_mean_ret_net = round(float(buy_plus["fwd_ret"].mean() - TXN_COST_ROUNDTRIP_PCT), 2)
     else:
         strategy_sharpe = float("nan")
         strategy_mean_ret = float("nan")
         strategy_win_rate = float("nan")
+        strategy_sharpe_net = float("nan")
+        strategy_mean_ret_net = float("nan")
 
     spy_monthly_avg = round(float(df_records["spy_ret"].mean()), 2)
 
@@ -441,9 +452,15 @@ def run_backtest_and_display(console=None):
                f"[green]{strategy_mean_ret:+.2f}%[/green]" if not np.isnan(strategy_mean_ret) else "N/A",
                "avg 30-day return for BUY/STRONG_BUY")
     t2.add_row("SPY mean monthly return",    f"{spy_monthly_avg:+.2f}%", "benchmark over same periods")
-    t2.add_row("BUY+ Sharpe (annualized)",
+    t2.add_row("BUY+ Sharpe (annualized, gross)",
                f"[{sharpe_color}]{strategy_sharpe:.2f}[/{sharpe_color}]" if not np.isnan(strategy_sharpe) else "N/A",
                ">0.5 is reasonable, >1.0 is strong")
+    t2.add_row("BUY+ mean return (net of costs)",
+               f"[yellow]{strategy_mean_ret_net:+.2f}%[/yellow]" if not np.isnan(strategy_mean_ret_net) else "N/A",
+               f"after {TXN_COST_ROUNDTRIP_PCT:.2f}% round-trip per rebalance")
+    t2.add_row("BUY+ Sharpe (net of costs)",
+               f"[{sharpe_color}]{strategy_sharpe_net:.2f}[/{sharpe_color}]" if not np.isnan(strategy_sharpe_net) else "N/A",
+               "the number that actually matters")
     t2.add_row(
         "IC (Information Coefficient)",
         f"[{ic_color}]{ic:.4f}[/{ic_color}]",

@@ -83,22 +83,24 @@ def entry_guide_section_md(picks: List, top_n: int = 15) -> str:
         g = build_entry_guide(
             s.ticker, getattr(s, "current_price", 0),
             getattr(s, "pct_from_52w_high", 0.0), layer=getattr(p, "layer", ""),
+            market_cap_b=getattr(s, "market_cap_b", None),
         )
         if g is None:
             continue
         rows.append(
             f"| {g.ticker} | ${_f(g.current_price, '{:,.2f}')} | {_f(g.pct_from_52w_high, '{:+.1f}%')} | "
             f"${_f(g.limit_price, '{:,.2f}')} (−{g.limit_discount_pct:.1f}%) | "
-            f"{g.etf_ticker} | {g.note} |"
+            f"{g.etf_ticker} | {g.liquidity_tier or '—'} | {g.note} |"
         )
     if not rows:
         return ""
     head = ("### 🎯 Actionable Entry Guide — Limit Price & ETF Proxy\n\n"
             "_Suggested limits are disciplined pullback entries (bigger discount the "
             "closer a name trades to its 52-week high). The ETF proxy is the closest "
-            "liquid basket if you'd rather not hold the single name._\n\n"
-            "| Ticker | Last | % off 52w High | Suggested Limit | ETF Proxy | Note |\n"
-            "|--------|------|----------------|-----------------|-----------|------|")
+            "liquid basket if you'd rather not hold the single name; liquidity flags "
+            "thin micro-caps where slippage is real._\n\n"
+            "| Ticker | Last | % off 52w High | Suggested Limit | ETF Proxy | Liquidity | Note |\n"
+            "|--------|------|----------------|-----------------|-----------|-----------|------|")
     return head + "\n" + "\n".join(rows) + "\n"
 
 

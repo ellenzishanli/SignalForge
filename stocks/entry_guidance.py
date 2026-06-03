@@ -99,6 +99,28 @@ class EntryGuide:
     etf_ticker: str
     etf_name: str
     note: str                     # short human-readable rationale
+    market_cap_b: Optional[float] = None
+    liquidity_tier: str = ""      # DEEP | LARGE | MID | SMALL | MICRO
+    est_slippage_pct: float = 0.0 # rough one-way slippage estimate, %
+
+
+def liquidity_assessment(market_cap_b: Optional[float]) -> tuple:
+    """
+    Rough liquidity tier + one-way slippage estimate from market cap (a usable
+    proxy when intraday dollar-volume isn't on hand). Thin micro-caps (GFAI,
+    ARQQ) get flagged so position size / slippage expectations are realistic —
+    the friend's point that Risk-Parity-style rebalances into illiquid names cost
+    real money.
+    """
+    if market_cap_b is None:
+        return "", 0.0, ""
+    mc = market_cap_b
+    if   mc >= 50:  tier, slip, note = "DEEP",  0.05, "deep liquidity"
+    elif mc >= 10:  tier, slip, note = "LARGE", 0.10, "liquid"
+    elif mc >= 2:   tier, slip, note = "MID",   0.25, "adequate liquidity"
+    elif mc >= 0.5: tier, slip, note = "SMALL", 0.60, "thin — use limits, size down"
+    else:           tier, slip, note = "MICRO", 1.50, "illiquid micro-cap — high slippage, small size only"
+    return tier, slip, note
 
 
 def recommend_etf(ticker: str, layer: str = "", sector: str = "",
@@ -149,35 +171,47 @@ def render_entry_guide_table(picks, top_n: int = 15):
     t.add_column("% off 52w High", justify="right", width=15)
     t.add_column("Suggested Limit", justify="right", width=18)
     t.add_column("ETF Proxy", width=10)
-    t.add_column("Note", width=46)
+    t.add_column("Liquidity", width=10)
+    t.add_column("Note", width=44)
+    _LIQ_C = {"DEEP": "green", "LARGE": "green", "MID": "cyan", "SMALL": "yellow", "MICRO": "red"}
     ranked = sorted(picks, key=lambda x: x.opportunity_score, reverse=True)[:top_n]
     for p in ranked:
         s = p.stock
         g = build_entry_guide(s.ticker, getattr(s, "current_price", 0),
-                              getattr(s, "pct_from_52w_high", 0.0), layer=getattr(p, "layer", ""))
+                              getattr(s, "pct_from_52w_high", 0.0), layer=getattr(p, "layer", ""),
+                              market_cap_b=getattr(s, "market_cap_b", None))
         if g is None:
             continue
         ext = g.pct_from_52w_high
         ext_c = "red" if ext >= -3 else "yellow" if ext >= -12 else "green"
+        liq_c = _LIQ_C.get(g.liquidity_tier, "dim")
         t.add_row(
             g.ticker, f"${g.current_price:,.2f}",
             f"[{ext_c}]{ext:+.1f}%[/{ext_c}]",
             f"${g.limit_price:,.2f} [dim](−{g.limit_discount_pct:.1f}%)[/dim]",
-            f"[cyan]{g.etf_ticker}[/cyan]", f"[dim]{g.note}[/dim]",
+            f"[cyan]{g.etf_ticker}[/cyan]",
+            f"[{liq_c}]{g.liquidity_tier or '—'}[/{liq_c}]",
+            f"[dim]{g.note}[/dim]",
         )
     return t
 
 
 def build_entry_guide(ticker: str, current_price: float, pct_from_52w_high: float,
-                      layer: str = "", sector: str = "", gem_category: str = "") -> Optional[EntryGuide]:
+                      layer: str = "", sector: str = "", gem_category: str = "",
+                      market_cap_b: Optional[float] = None) -> Optional[EntryGuide]:
     """Assemble the full entry plan for one name. Returns None if price missing."""
     if not current_price or current_price <= 0:
         return None
     limit, disc, note = suggest_limit_price(current_price, pct_from_52w_high)
     etf_t, etf_n = recommend_etf(ticker, layer, sector, gem_category)
+    tier, slip, liq_note = liquidity_assessment(market_cap_b)
+    if tier in ("SMALL", "MICRO"):
+        note = f"{note} · {liq_note}"
     return EntryGuide(
         ticker=ticker, current_price=round(float(current_price), 2),
         pct_from_52w_high=round(float(pct_from_52w_high or 0.0), 1),
         limit_price=limit, limit_discount_pct=disc,
         etf_ticker=etf_t, etf_name=etf_n, note=note,
+        market_cap_b=round(market_cap_b, 2) if market_cap_b is not None else None,
+        liquidity_tier=tier, est_slippage_pct=slip,
     )
