@@ -308,9 +308,15 @@ GMAIL_APP_PASSWORD=your_16_char_app_password
 
 ## For VC / PE / Finance / Quant Careers
 
-### One-paragraph résumé blurb
+This project demonstrates end-to-end financial engineering across four pillars:
 
-> **SignalForge** — Built an end-to-end quantitative investment research and portfolio construction platform in Python. Features: (1) **Defensive Alpha portfolio engine** implementing AQR's Total Portfolio Approach — beta-adjusted alpha via CAPM regression, Dimson/lagged beta, appraisal ratio (alpha ÷ idiosyncratic vol), betting-against-beta tilt, and a convexity sleeve (trend-following, anti-beta, gold, long bonds) sized to a target portfolio beta; backtested against SPY with downside-capture, upside-capture, win-rate-in-down-months, max drawdown, and 2022/2025 stress-window analysis. (2) **AI Infrastructure Value Chain** scanner scoring ~50 picks-and-shovels names (compute silicon, networking/optics, power, memory, neoclouds) with a custom Opportunity Score that surfaces fair-valued high-growth setups before market re-rating. (3) **Smart Money tracker** parsing SEC EDGAR 13F filings for 20+ hedge funds (Berkshire, Bridgewater, Renaissance, Tiger Global) with QoQ change detection, congressional trade monitoring (STOCK Act), and C-suite insider buying. (4) **5-factor quant engine** using Kalman filter, Markov chain regime detection, Hurst exponent, and multi-factor modeling (Value/Growth/Quality/Momentum) across 150+ stocks; walk-forward backtested with OLS factor weight optimization. Concurrent SEC pipeline with global rate limiting completes in <90 seconds, with LLM-generated bilingual (EN/中文) analysis and an automated daily HTML email report delivered at 7 AM PT.
+**🛡️ Defensive Alpha Portfolio Engine** — CAPM factor model computing beta-adjusted alpha (appraisal ratio = alpha ÷ idiosyncratic vol), Dimson/lagged beta for true market sensitivity, betting-against-beta tilt, and a convexity sleeve (trend-following, anti-beta, gold, long bonds) sized to a target portfolio beta. Stress-tested with downside/upside capture, win-rate in down months, max drawdown vs SPY, and 2022 / 2025 historical selloff windows. Grounded in AQR's Total Portfolio Approach research.
+
+**🛰️ AI Infrastructure Value Chain** — ~50 picks-and-shovels names scored across 8 layers (compute silicon, foundry, memory, networking/optics, servers/cooling, neoclouds, power, hyperscalers) with a custom Opportunity Score rewarding fair valuation + high growth + analyst upside before market re-rating.
+
+**🐋 Smart Money Tracker** — Live SEC EDGAR 13F XML parsing for 20+ funds (Berkshire, Bridgewater, Renaissance, Tiger Global) with QoQ change detection, congressional trade monitoring (STOCK Act), and insider buying signals. Concurrent pipeline with global rate limiting completes in <90 seconds.
+
+**📊 5-Factor Quant Engine** — Kalman filter (fair value tracking), Markov chain regime detection (BULL/BEAR/SIDEWAYS), Hurst exponent (mean-reverting vs trending), and multi-factor model (Value/Growth/Quality/Momentum) scoring 150+ stocks. Walk-forward backtested with OLS factor weight optimization. LLM-generated bilingual (EN/中文) analysis delivered by automated daily email.
 
 ### Skill matrix
 
