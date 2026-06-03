@@ -46,6 +46,10 @@ from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analy
 from analysis.llm_client import get_provider
 from analysis.headline_trades import analyze_headline_trades, render_headline_trades_panel
 from analysis.emailer import send_daily_report, check_email_config
+from analysis.report_builder import (
+    ai_infra_section_md, whales_section_md, etf_section_md,
+    sectors_section_md, gems_section_md,
+)
 from config.universe import SECTORS
 
 console = Console(width=280)
@@ -190,7 +194,7 @@ def run_ai_infra():
     AI Infrastructure value-chain scan — hunt the 'next Micron'.
     Scores every name across the stack on valuation + growth + analyst upside,
     surfacing fairly-valued high-potential setups over already-extended winners.
-    Returns the AI analysis text (for reuse in the full report / email).
+    Returns (analysis_text, picks) for reuse in the full report / email.
     """
     console.print(Rule(f"[bold green]🛰️  AI Infrastructure Value Chain — {TODAY}[/bold green]"))
     console.print("[dim]Hunting the next Micron: fair value + high growth + real upside, across the whole AI stack[/dim]\n")
@@ -232,7 +236,7 @@ def run_ai_infra():
         display.print()
         display.print(_SCROLL_HINT)
 
-    return analysis
+    return analysis, picks
 
 
 def run_stocks(briefing_mode: bool = False):
@@ -314,7 +318,7 @@ def run_tech_radar():
 
     # ── 0. AI Infrastructure Value Chain (the headline section) ───────────────
     console.print(Rule(f"[bold green]🛰️  Part 0: AI Infrastructure Value Chain[/bold green]"))
-    ai_infra_analysis = run_ai_infra()
+    ai_infra_analysis, ai_picks = run_ai_infra()
     console.print()
 
     # ── 1. Defensive Alpha — Portfolio Construction ───────────────────────────
@@ -324,7 +328,7 @@ def run_tech_radar():
 
     # ── 2. Whale Tracker (has its own pager) ──────────────────────────────────
     console.print(Rule(f"[bold yellow]🐋 Part 2: Smart Money / Whale Tracker[/bold yellow]"))
-    run_whale_tracker()
+    _whale_summary, whale_trades = run_whale_tracker()
     console.print()
 
     # ── 3. Stocks (has its own pager) ─────────────────────────────────────────
@@ -359,18 +363,34 @@ def run_tech_radar():
         display.print()
         display.print(_SCROLL_HINT)
 
-    # Save combined report
+    # Save combined report — mirror every terminal section (data tables + the
+    # LLM narrative) so the daily email is complete, not just the prose.
     output_file = OUTPUT_DIR / f"radar_{TODAY}.md"
+
+    def _section(f, title, *blocks):
+        """Write a '## title' section only if it has real content."""
+        body = "\n\n".join(b.strip() for b in blocks if b and b.strip())
+        if body:
+            f.write(f"## {title}\n\n{body}\n\n---\n\n")
+
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(f"# Frontier Tech Radar — {TODAY}\n\n")
-        f.write("## AI Infrastructure Value Chain\n\n")
-        f.write(ai_infra_analysis + "\n\n---\n\n")
-        f.write("## Defensive Alpha — Portfolio Construction\n\n")
-        f.write(portfolio_report_md + "\n\n---\n\n")
-        f.write("## Market Intelligence Report\n\n")
-        f.write(stock_analysis + "\n\n---\n\n")
-        f.write("## Tech Briefing\n\n")
-        f.write(briefing + "\n")
+        _section(f, "🛰️ AI Infrastructure Value Chain",
+                 ai_infra_section_md(ai_picks, ai_infra_analysis))
+        _section(f, "🛡️ Defensive Alpha — Portfolio Construction",
+                 portfolio_report_md)
+        _section(f, "🐋 Smart Money — Whale & Insider Tracker",
+                 whales_section_md(whale_trades))
+        _section(f, "📦 ETF Rankings",
+                 etf_section_md(etf_stocks))
+        _section(f, "🔭 Sector Leaders",
+                 sectors_section_md(sector_results))
+        _section(f, "💎 Hidden Gems",
+                 gems_section_md(gems))
+        _section(f, "📊 Market Intelligence Report",
+                 stock_analysis)
+        _section(f, "🔭 Tech Briefing",
+                 briefing)
     console.print(f"\n[bold green]✅ Report saved: {output_file}[/bold green]")
     return headline_analysis
 

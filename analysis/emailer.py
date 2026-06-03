@@ -12,6 +12,7 @@ Usage:
         send_daily_report(report_md, headline_trades=trades_text)
 """
 import os
+import re
 import smtplib
 import ssl
 from datetime import datetime
@@ -28,12 +29,108 @@ def check_email_config() -> bool:
     return bool(os.getenv("GMAIL_ADDRESS")) and bool(os.getenv("GMAIL_APP_PASSWORD"))
 
 
+# ── Minimal, dependency-free Markdown → HTML for the dark email theme ─────────
+def _esc(text: str) -> str:
+    """Escape HTML special chars."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _inline_md(text: str) -> str:
+    """Inline markdown: escape, then **bold** and _italic_."""
+    text = _esc(text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong style='color:#e8f0f8;'>\1</strong>", text)
+    text = re.sub(r"(?<![\w*])_(.+?)_(?![\w*])", r"<em style='color:#9fc0d8;'>\1</em>", text)
+    return text
+
+
+def _md_table_html(header: str, rows: list) -> str:
+    def cells(row: str):
+        return [c.strip() for c in row.strip().strip("|").split("|")]
+    th = "".join(
+        f"<th style=\"text-align:left;padding:6px 10px;border-bottom:2px solid #2a4a6a;"
+        f"color:#7ec8e3;font-size:12px;white-space:nowrap;\">{_inline_md(c)}</th>"
+        for c in cells(header)
+    )
+    body = []
+    for r in rows:
+        tds = "".join(
+            f"<td style=\"padding:5px 10px;border-bottom:1px solid #1a2530;"
+            f"color:#cdd9e3;font-size:12px;\">{_inline_md(c)}</td>"
+            for c in cells(r)
+        )
+        body.append(f"<tr>{tds}</tr>")
+    return (
+        "<table cellspacing=\"0\" cellpadding=\"0\" style=\"width:100%;border-collapse:collapse;"
+        "margin:10px 0 18px 0;font-family:'Courier New',Courier,monospace;\">"
+        f"<thead><tr>{th}</tr></thead><tbody>{''.join(body)}</tbody></table>"
+    )
+
+
+def _md_to_html(md: str) -> str:
+    """Render the subset of Markdown we emit: headings, tables, lists, hr,
+    bold/italic, and paragraphs. Self-contained — no external dependency."""
+    lines = md.split("\n")
+    out, in_list, i = [], False, 0
+
+    def close_list():
+        nonlocal in_list
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+
+    sep_re = re.compile(r"^\s*\|[\s:|-]+\|?\s*$")
+    while i < len(lines):
+        line = lines[i].rstrip()
+
+        # Table: a header row followed by a |---|---| separator.
+        if line.startswith("|") and i + 1 < len(lines) and sep_re.match(lines[i + 1]):
+            close_list()
+            header = line
+            i += 2
+            rows = []
+            while i < len(lines) and lines[i].strip().startswith("|"):
+                rows.append(lines[i])
+                i += 1
+            out.append(_md_table_html(header, rows))
+            continue
+
+        if not line.strip():
+            close_list(); i += 1; continue
+
+        if line.startswith("### "):
+            close_list()
+            out.append(f"<h3 style=\"color:#9fd0e8;font-size:14px;margin:18px 0 8px;"
+                       f"font-family:'Courier New',Courier,monospace;\">{_inline_md(line[4:])}</h3>")
+        elif line.startswith("## "):
+            close_list()
+            out.append(f"<h2 style=\"color:#5ba3d9;font-size:16px;margin:24px 0 10px;"
+                       f"border-bottom:1px solid #1e4080;padding-bottom:6px;"
+                       f"font-family:'Courier New',Courier,monospace;\">{_inline_md(line[3:])}</h2>")
+        elif line.startswith("# "):
+            close_list()
+            out.append(f"<h1 style=\"color:#5ba3d9;font-size:18px;margin:8px 0 14px;"
+                       f"font-family:'Courier New',Courier,monospace;\">{_inline_md(line[2:])}</h1>")
+        elif line.strip() == "---":
+            close_list()
+            out.append("<hr style=\"border:none;border-top:1px solid #1a2a3a;margin:18px 0;\">")
+        elif line.lstrip().startswith("- "):
+            if not in_list:
+                out.append("<ul style=\"margin:6px 0 12px;padding-left:20px;color:#cdd9e3;"
+                           "font-size:13px;line-height:1.6;\">")
+                in_list = True
+            out.append(f"<li>{_inline_md(line.lstrip()[2:])}</li>")
+        else:
+            close_list()
+            out.append(f"<p style=\"color:#cdd9e3;font-size:13px;line-height:1.65;margin:6px 0;"
+                       f"font-family:'Courier New',Courier,monospace;\">{_inline_md(line)}</p>")
+        i += 1
+
+    close_list()
+    return "\n".join(out)
+
+
 def _build_html(report_md: str, headline_trades: str = "") -> str:
     """Build a dark-themed HTML email from the markdown report text."""
-
-    # Escape HTML special chars in plain-text sections
-    def _esc(text: str) -> str:
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     headline_section = ""
     if headline_trades and headline_trades.strip():
@@ -66,22 +163,7 @@ def _build_html(report_md: str, headline_trades: str = "") -> str:
 
     report_section = f"""
         <div style="margin: 24px 0;">
-            <h2 style="
-                margin: 0 0 14px 0;
-                font-size: 15px;
-                color: #7ec8e3;
-                font-family: 'Courier New', Courier, monospace;
-                letter-spacing: 0.05em;
-            ">📊 Full Intelligence Report</h2>
-            <pre style="
-                margin: 0;
-                white-space: pre-wrap;
-                word-break: break-word;
-                font-family: 'Courier New', Courier, monospace;
-                font-size: 13px;
-                line-height: 1.65;
-                color: #d4e8f0;
-            ">{_esc(report_md)}</pre>
+            {_md_to_html(report_md)}
         </div>
 """
 

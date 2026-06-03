@@ -571,7 +571,9 @@ def render_follow_summary(all_trades: List[WhaleTrade]) -> Table:
 
 # ── Main Runner ────────────────────────────────────────────────────────────────
 
-def run_whale_tracker() -> str:
+def run_whale_tracker() -> Tuple[str, List["WhaleTrade"]]:
+    """Render the whale tracker to the terminal and return (summary, all_trades)
+    so callers (e.g. the daily email report) can reuse the raw signals."""
     import os
     os.environ.setdefault("LESS", "-RS")
     all_trades: List[WhaleTrade] = []
@@ -579,7 +581,7 @@ def run_whale_tracker() -> str:
     out = Console(width=280)
     with out.pager(styles=True):
         _whale_tracker_body(out, all_trades, summary_lines)
-    return "\n".join(summary_lines)
+    return "\n".join(summary_lines), all_trades
 
 
 def _whale_tracker_body(out: Console, all_trades: List[WhaleTrade], summary_lines: list) -> None:
