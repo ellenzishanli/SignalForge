@@ -100,6 +100,80 @@ def _compute_price_composite(closes: pd.Series, hist_df: pd.DataFrame) -> dict:
     }
 
 
+def compute_period_ic(df_records, score_col="composite", ret_col="fwd_ret",
+                      date_col="eval_date") -> dict:
+    """
+    Rank Information Coefficient, computed per rebalance period then aggregated —
+    the right way to measure predictive power (a single pooled IC mixes regimes).
+
+      mean_ic      — average cross-sectional rank corr(score, forward return)
+      ic_std       — period-to-period volatility of the IC
+      ic_ir        — IC information ratio = mean_ic / ic_std (consistency)
+      t_stat       — mean_ic / (ic_std / sqrt(n)) — is the IC distinguishable from 0?
+      pct_positive — % of periods with a positive IC
+
+    Rule of thumb: a stable mean IC of 0.03–0.08 is a genuinely useful factor;
+    near 0 (or t-stat < ~2) means little real predictive power.
+    """
+    ics = []
+    for _, g in df_records.groupby(date_col):
+        if len(g) < 5:
+            continue
+        sr = g[score_col].rank()
+        rr = g[ret_col].rank()
+        if sr.std(ddof=0) == 0 or rr.std(ddof=0) == 0:
+            continue
+        ic = float(np.corrcoef(sr, rr)[0, 1])
+        if ic == ic:
+            ics.append(ic)
+    ics = np.array(ics)
+    if len(ics) == 0:
+        return {"mean_ic": float("nan"), "ic_std": float("nan"), "ic_ir": float("nan"),
+                "t_stat": float("nan"), "pct_positive": float("nan"), "n_periods": 0}
+    mean = float(ics.mean())
+    std = float(ics.std(ddof=1)) if len(ics) > 1 else 0.0
+    ir = mean / std if std > 0 else float("nan")
+    t_stat = mean / (std / np.sqrt(len(ics))) if std > 0 else float("nan")
+    return {
+        "mean_ic": round(mean, 4), "ic_std": round(std, 4),
+        "ic_ir": round(ir, 3) if ir == ir else float("nan"),
+        "t_stat": round(t_stat, 2) if t_stat == t_stat else float("nan"),
+        "pct_positive": round(float((ics > 0).mean() * 100), 1),
+        "n_periods": int(len(ics)),
+    }
+
+
+def compute_quantile_performance(df_records, n_buckets=5, score_col="composite",
+                                 ret_col="fwd_ret", date_col="eval_date") -> dict:
+    """
+    Sort names into ``n_buckets`` by score each period and track each bucket's mean
+    forward return. A working model is monotonic (higher bucket → higher return)
+    with a positive top-minus-bottom (long-short) spread.
+    """
+    bucket_rets = {i: [] for i in range(n_buckets)}
+    n_periods = 0
+    for _, g in df_records.groupby(date_col):
+        if len(g) < n_buckets:
+            continue
+        ranks = g[score_col].rank(method="first")
+        try:
+            buckets = pd.qcut(ranks, n_buckets, labels=False)
+        except ValueError:
+            continue
+        n_periods += 1
+        for b, gg in g.groupby(buckets):
+            bucket_rets[int(b)].append(float(gg[ret_col].mean()))
+    means = [round(float(np.mean(bucket_rets[i])), 2) if bucket_rets[i] else float("nan")
+             for i in range(n_buckets)]
+    lo, hi = means[0], means[-1]
+    spread = round(hi - lo, 2) if lo == lo and hi == hi else float("nan")
+    valid = [m for m in means if m == m]
+    monotonic = (len(valid) == len(means)
+                 and all(means[i] <= means[i + 1] + 1e-9 for i in range(len(means) - 1)))
+    return {"bucket_means": means, "long_short_spread": spread,
+            "monotonic": bool(monotonic), "n_periods": n_periods}
+
+
 def run_backtest_and_display(console=None):
     """
     Walk-forward backtest entry point. Downloads price data, runs monthly
@@ -420,12 +494,49 @@ def run_backtest_and_display(console=None):
             f"[{d_color}]{delta:+.2%}[/{d_color}]",
         )
 
+    # ── Table 4: Predictive-power validation (per-period rank IC + quantiles) ──
+    ic_stats = compute_period_ic(df_records)
+    q_stats = compute_quantile_performance(df_records, n_buckets=5)
+
+    t4 = Table(
+        title="[bold]Predictive Power — Rank IC & Score Quintiles (walk-forward)[/bold]",
+        show_header=True, header_style="bold green", border_style="bright_blue",
+    )
+    t4.add_column("Metric", width=30)
+    t4.add_column("Value", justify="right", width=16)
+    t4.add_column("Read", width=46)
+
+    mic = ic_stats["mean_ic"]
+    mic_color = "green" if (mic == mic and mic > 0.03) else ("yellow" if (mic == mic and mic > 0) else "red")
+    t4.add_row("Mean rank IC (per period)",
+               f"[{mic_color}]{mic:.4f}[/{mic_color}]" if mic == mic else "N/A",
+               "0.03–0.08 = genuinely useful; ~0 = no edge")
+    t4.add_row("IC information ratio",
+               f"{ic_stats['ic_ir']:.2f}" if ic_stats['ic_ir'] == ic_stats['ic_ir'] else "N/A",
+               "mean IC ÷ its volatility (consistency)")
+    t4.add_row("IC t-stat",
+               f"{ic_stats['t_stat']:.2f}" if ic_stats['t_stat'] == ic_stats['t_stat'] else "N/A",
+               "[dim]|t| > 2 → IC distinguishable from zero[/dim]")
+    t4.add_row("% periods IC > 0",
+               f"{ic_stats['pct_positive']:.0f}%" if ic_stats['pct_positive'] == ic_stats['pct_positive'] else "N/A",
+               f"across {ic_stats['n_periods']} rebalance periods")
+    bm = q_stats["bucket_means"]
+    bm_str = " → ".join(f"{m:+.1f}" if m == m else "—" for m in bm)
+    t4.add_row("Quintile mean fwd ret % (Q1→Q5)", bm_str, "monotone rising = score ranks names well")
+    ls = q_stats["long_short_spread"]
+    ls_color = "green" if (ls == ls and ls > 0) else "red"
+    t4.add_row("Top-minus-bottom spread",
+               f"[{ls_color}]{ls:+.2f}%[/{ls_color}]" if ls == ls else "N/A",
+               f"Q5 − Q1; monotonic={q_stats['monotonic']}")
+
     # ── Render all tables ──
     console.print(t1)
     console.print()
     console.print(t2)
     console.print()
     console.print(t3)
+    console.print()
+    console.print(t4)
     console.print()
 
     # ── Interpretation panel ──
