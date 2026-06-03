@@ -151,6 +151,7 @@ class QuantReport:
     overall_quant_score: float      # 0-100
     signal_type: str                # STRONG_BUY | BUY | HOLD | SELL | STRONG_SELL
     quant_thesis: str
+    signal_conflicts: str = ""      # human-readable note when factors disagree
     # ── Convenience shortcuts ──
     @property
     def momentum(self): return self.technical.macd  # backward compat
@@ -490,11 +491,38 @@ def build_quant_report(sd, closes: pd.Series, hist_df: pd.DataFrame = None) -> Q
     if strong_growth and strong_uptrend and not is_etf:
         overall = max(overall, 50.0)
 
+    # ── Analyst sentiment factor (was missing — fixes "SELL but analyst +33%") ─
+    # Fold the sell-side target upside into the score as a genuine, bounded
+    # factor instead of ignoring it. Strong consensus upside lifts the score;
+    # consensus downside trims it.
+    upside = getattr(sd, "upside_to_target", None)
+    if upside is not None and not is_etf:
+        if   upside > 30: overall += 3.0
+        elif upside > 15: overall += 1.5
+        elif upside < -10: overall -= 2.0
+        overall = round(float(np.clip(overall, 0, 100)), 1)
+
     if   overall >= 72: sig = "STRONG_BUY"
     elif overall >= 58: sig = "BUY"
     elif overall >= 42: sig = "HOLD"
     elif overall >= 28: sig = "SELL"
     else:               sig = "STRONG_SELL"
+
+    # ── Conflict arbitration: surface when the factors disagree, and don't let
+    # the model fight a strong analyst conviction blindly (lift SELL→HOLD). ────
+    conflicts = []
+    r1m = getattr(sd, "return_1m", 0) or 0
+    r1y = getattr(sd, "return_1y", 0) or 0
+    if sig not in ("STRONG_BUY", "BUY") and upside is not None and upside > 25:
+        conflicts.append(f"analyst sees +{upside:.0f}% upside but model says {sig}")
+        if overall < 42:                      # rescue out of the SELL band to HOLD
+            overall, sig = 42.0, "HOLD"
+    if (r1m > 5 and r1y < -15) or (r1m < -5 and r1y > 15):
+        conflicts.append(f"timeframe split: 1M {r1m:+.0f}% vs 1Y {r1y:+.0f}%")
+    if ml.trend_signal in ("STRONG_UP", "UP") and stat.composite_score < 40:
+        conflicts.append("momentum up but mean-reversion bearish (extended)")
+    if fund.composite_score >= 7 and sig in ("SELL", "STRONG_SELL"):
+        conflicts.append(f"strong fundamentals (F={fund.composite_score:.1f}) vs technical {sig}")
 
     # ── Thesis ──
     parts = []
@@ -512,13 +540,17 @@ def build_quant_report(sd, closes: pd.Series, hist_df: pd.DataFrame = None) -> Q
     if fund.garp_rating in ("CHEAP","FAIR"): parts.append(f"GARP={fund.garp_rating}")
     if fund.quality_score >= 7.5:            parts.append(f"high quality (QMJ={fund.quality_score:.1f})")
     if ml.trend_signal in ("STRONG_UP","UP"):parts.append(f"ML trend up (R²={ml.r_squared_20d:.2f})")
+    if upside is not None and upside > 15:   parts.append(f"analyst +{upside:.0f}% upside")
     if not parts:                            parts.append("no strong directional signal")
+
+    conflict_str = (" ⚠️ conflicts: " + "; ".join(conflicts)) if conflicts else ""
 
     return QuantReport(
         ticker=sd.ticker, technical=tech, statistical=stat,
         ml_trend=ml, vol_regime=vol, risk=risk, fundamental=fund,
         overall_quant_score=overall, signal_type=sig,
-        quant_thesis=f"[{sig}] " + " | ".join(parts),
+        quant_thesis=f"[{sig}] " + " | ".join(parts) + conflict_str,
+        signal_conflicts="; ".join(conflicts),
     )
 
 

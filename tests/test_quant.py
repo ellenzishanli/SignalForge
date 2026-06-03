@@ -262,3 +262,51 @@ class TestSignalQualityFixes:
         sd = self._sd(revenue_growth=120.0, return_1y=95.0, market_cap_b=8.0)
         report = build_quant_report(sd, trending_prices, ohlcv_df)
         assert report.signal_type not in ("SELL", "STRONG_SELL")
+
+
+class TestFactorArbitration:
+    def _sd(self, **over):
+        base = dict(
+            ticker="TEST", pe_ratio=20.0, pb_ratio=3.0, ps_ratio=5.0, forward_pe=18.0,
+            revenue_growth=10.0, earnings_growth=5.0, profit_margin=8.0,
+            return_1m=2.0, return_6m=5.0, return_1y=10.0, upside_to_target=None,
+            return_on_equity=12.0, debt_to_equity=0.8, market_cap_b=20.0,
+            is_etf=False, gem_category=None)
+        base.update(over)
+        return SimpleNamespace(**base)
+
+    def test_analyst_upside_lifts_score(self, flat_prices, ohlcv_df):
+        low = build_quant_report(self._sd(upside_to_target=None), flat_prices, ohlcv_df)
+        high = build_quant_report(self._sd(upside_to_target=40.0), flat_prices, ohlcv_df)
+        assert high.overall_quant_score > low.overall_quant_score
+
+    def _bearish(self):
+        np.random.seed(11)
+        rets = np.random.normal(-0.004, 0.02, 252)   # persistent downtrend
+        px = pd.Series(100 * np.exp(np.cumsum(rets)))
+        df = pd.DataFrame({"Close": px, "High": px * 1.005, "Low": px * 0.995,
+                           "Volume": np.random.uniform(1e6, 1e7, len(px))})
+        return px, df
+
+    def test_analyst_more_bullish_than_model_is_flagged(self):
+        px, df = self._bearish()
+        sd = self._sd(upside_to_target=45.0, profit_margin=-5.0, revenue_growth=-5.0,
+                      return_1y=-30.0, return_1m=-8.0)
+        report = build_quant_report(sd, px, df)
+        # Big analyst upside while the model is not a BUY → flagged as a conflict,
+        # and never left in the SELL band (rescued to HOLD).
+        assert "analyst" in report.signal_conflicts.lower()
+        assert report.signal_type not in ("SELL", "STRONG_SELL")
+
+    def test_timeframe_conflict_flagged(self):
+        px, df = self._bearish()
+        sd = self._sd(return_1m=12.0, return_1y=-40.0)   # 1M up, 1Y crashed (SMR-like)
+        report = build_quant_report(sd, px, df)
+        assert "timeframe" in report.signal_conflicts.lower()
+
+    def test_no_conflict_when_aligned(self, trending_prices, ohlcv_df):
+        sd = self._sd(return_1m=5.0, return_6m=20.0, return_1y=40.0,
+                      revenue_growth=30.0, upside_to_target=20.0)
+        report = build_quant_report(sd, trending_prices, ohlcv_df)
+        # An aligned bullish name need not flag the analyst/timeframe conflicts.
+        assert "analyst sees" not in report.signal_conflicts
