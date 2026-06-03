@@ -51,6 +51,14 @@ class FactorProfile:
     upside_beta: float
     convexity: float           # upside_beta − downside_beta
     ann_return: float          # realized annualized return over the window, %
+    # ── Multi-factor (Fama-French via ETF proxies); None if not computed ──────
+    alpha_mf_annual: Optional[float] = None    # alpha after stripping ALL factors
+    r_squared_mf: Optional[float] = None       # multi-factor R² (much higher than CAPM)
+    beta_mkt_mf: Optional[float] = None        # market loading in the MF model
+    beta_size: Optional[float] = None          # SMB loading
+    beta_value: Optional[float] = None         # HML loading (+ = value, − = growth)
+    beta_mom: Optional[float] = None           # MOM loading
+    beta_qual: Optional[float] = None          # QMJ loading
 
 
 def _ols(y: np.ndarray, X: np.ndarray):
@@ -70,10 +78,15 @@ def compute_factor_profile(
     stock_prices: pd.Series,
     market_prices: pd.Series,
     rf_annual: float = DEFAULT_RF_ANNUAL,
+    factors: Optional[pd.DataFrame] = None,
 ) -> Optional[FactorProfile]:
     """
     Estimate the full CAPM factor profile for one name vs the market (SPY).
     Prices are aligned on their common dates; needs >= ~120 overlapping days.
+
+    If ``factors`` (a daily DataFrame of Fama-French style factor returns, see
+    portfolio/factors.py) is supplied, also run the multi-factor regression and
+    fill the MF fields (multi-factor alpha, R², and per-factor loadings).
     """
     # Align on common dates, convert to daily simple returns.
     df = pd.concat([stock_prices.rename("s"), market_prices.rename("m")], axis=1).dropna()
@@ -122,6 +135,9 @@ def compute_factor_profile(
     appraisal = (alpha_annual / idio_vol_annual) if idio_vol_annual > 1e-9 else 0.0
     ann_return = (float(np.mean(rs.values)) * TRADING_DAYS) * 100
 
+    # ── Multi-factor (Fama-French style) regression, if factors provided ──────
+    mf = _multifactor_fit(rs, factors, rf_daily) if factors is not None else None
+
     return FactorProfile(
         ticker=ticker, name=name, sleeve=sleeve, n_obs=n,
         beta=round(beta, 3), beta_lagged=round(beta_lagged, 3),
@@ -135,7 +151,39 @@ def compute_factor_profile(
         upside_beta=round(upside_beta, 3),
         convexity=round(convexity, 3),
         ann_return=round(ann_return, 1),
+        **(mf or {}),
     )
+
+
+def _multifactor_fit(rs: pd.Series, factors: pd.DataFrame, rf_daily: float) -> Optional[dict]:
+    """
+    Regress the stock's excess daily return on the factor matrix
+    (mkt, smb, hml, mom, qmj). Returns a dict of MF fields, or None if there is
+    too little overlap. Strips the *known* factor exposures so the residual alpha
+    is far more honest than the single-SPY version.
+    """
+    from portfolio.factors import FACTOR_COLUMNS
+    cols = [c for c in FACTOR_COLUMNS if c in factors.columns]
+    if not cols:
+        return None
+    df = pd.concat([rs.rename("y"), factors[cols]], axis=1).dropna()
+    if len(df) < 120:
+        return None
+    y = df["y"].values - rf_daily
+    X = np.column_stack([np.ones(len(df))] + [df[c].values for c in cols])
+    coefs, resid = _ols(y, X)
+    r2 = 1.0 - np.var(resid) / np.var(y) if np.var(y) > 0 else 0.0
+    loadings = dict(zip(cols, coefs[1:]))
+    out = {
+        "alpha_mf_annual": round(float(coefs[0]) * TRADING_DAYS * 100, 2),
+        "r_squared_mf": round(float(r2), 3),
+        "beta_mkt_mf": round(float(loadings.get("mkt", float("nan"))), 3),
+        "beta_size": round(float(loadings.get("smb", float("nan"))), 3),
+        "beta_value": round(float(loadings.get("hml", float("nan"))), 3),
+        "beta_mom": round(float(loadings.get("mom", float("nan"))), 3),
+        "beta_qual": round(float(loadings.get("qmj", float("nan"))), 3),
+    }
+    return out
 
 
 def _conditional_beta(y: np.ndarray, x: np.ndarray) -> float:

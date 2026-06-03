@@ -10,6 +10,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from portfolio.factor_model import compute_factor_profile
+from portfolio.factors import build_factor_returns, factor_proxy_tickers, FACTOR_COLUMNS
 from portfolio.construction import construct_defensive_portfolio
 from portfolio.risk_parity import (
     solve_risk_parity, risk_contributions, build_risk_parity_portfolio,
@@ -56,6 +57,54 @@ class TestFactorModel:
         p = compute_factor_profile("X", "Test", "alpha", stk, mkt)
         assert p.alpha_annual < 0
         assert p.appraisal_ratio < 0
+
+
+class TestMultiFactor:
+    def _factor_prices(self, n=600, seed=20):
+        """Synthetic price series for SPY + the factor-proxy ETFs."""
+        rng = np.random.default_rng(seed)
+        idx = pd.bdate_range("2021-01-01", periods=n)
+        prices = {}
+        for t in factor_proxy_tickers():
+            ret = rng.normal(0.0003, 0.01, n)
+            prices[t] = pd.Series(100 * np.cumprod(1 + ret), index=idx)
+        return prices, idx
+
+    def test_build_factor_returns_has_columns(self):
+        prices, _ = self._factor_prices()
+        f = build_factor_returns(prices)
+        assert f is not None
+        for c in FACTOR_COLUMNS:
+            assert c in f.columns
+
+    def test_build_factor_returns_none_without_spy(self):
+        prices, _ = self._factor_prices()
+        prices.pop("SPY")
+        assert build_factor_returns(prices) is None
+
+    def test_multifactor_fields_populated(self):
+        prices, idx = self._factor_prices()
+        factors = build_factor_returns(prices)
+        # Build a stock that is mostly market + momentum exposure.
+        rng = np.random.default_rng(99)
+        spy_ret = prices["SPY"].pct_change().fillna(0).values
+        mom_ret = (prices["MTUM"].pct_change().fillna(0).values
+                   - prices["SPY"].pct_change().fillna(0).values)
+        stock_ret = 1.3 * spy_ret + 0.8 * mom_ret + rng.normal(0, 0.004, len(idx))
+        stock_px = pd.Series(100 * np.cumprod(1 + stock_ret), index=idx)
+        p = compute_factor_profile("X", "Test", "alpha", stock_px, prices["SPY"], factors=factors)
+        assert p is not None
+        assert p.alpha_mf_annual is not None
+        assert p.r_squared_mf is not None
+        assert p.beta_mom is not None
+        # Multi-factor R² should explain a meaningful share of variance.
+        assert p.r_squared_mf > 0.5
+
+    def test_no_factors_leaves_mf_none(self):
+        stk, mkt = _make_series(beta=1.0, alpha_daily=0.0, noise=0.004, seed=5)
+        p = compute_factor_profile("X", "Test", "alpha", stk, mkt)  # no factors
+        assert p.alpha_mf_annual is None
+        assert p.r_squared_mf is None
 
 
 class TestConstruction:

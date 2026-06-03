@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.universe import PORTFOLIO_UNIVERSE
 from portfolio.data import fetch_universe_prices
 from portfolio.factor_model import compute_factor_profile, FactorProfile
+from portfolio.factors import build_factor_returns, factor_proxy_tickers
 from portfolio.construction import construct_defensive_portfolio, Portfolio
 from portfolio.risk_parity import build_risk_parity_portfolio
 from portfolio.stress import stress_test, StressReport
@@ -44,14 +45,20 @@ def run_portfolio_engine(
 ) -> PortfolioResult:
     universe = universe or PORTFOLIO_UNIVERSE
     meta = _sleeve_lookup(universe)
-    tickers = list(meta.keys())
+    # Fetch the universe plus the ETF proxies needed to build Fama-French factors.
+    fetch_list = list(dict.fromkeys(list(meta.keys()) + factor_proxy_tickers()))
 
-    market, prices = fetch_universe_prices(tickers, period=period, progress=progress)
+    market, prices = fetch_universe_prices(fetch_list, period=period, progress=progress)
+
+    # Build the multi-factor return matrix (SPY market + size/value/mom/quality).
+    factors = build_factor_returns({**prices, "SPY": market})
 
     profiles: List[FactorProfile] = []
     for ticker, closes in prices.items():
+        if ticker not in meta:
+            continue  # factor-proxy ETF that isn't part of the portfolio universe
         sleeve, name = meta.get(ticker, ("alpha", ticker))
-        prof = compute_factor_profile(ticker, name, sleeve, closes, market)
+        prof = compute_factor_profile(ticker, name, sleeve, closes, market, factors=factors)
         if prof is not None:
             profiles.append(prof)
 

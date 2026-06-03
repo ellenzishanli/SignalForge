@@ -34,12 +34,15 @@ def render_factor_table(result: PortfolioResult) -> Table:
     t.add_column("Sleeve", width=8)
     t.add_column("Beta", justify="right", width=7)
     t.add_column("Dimson β", justify="right", width=9)
-    t.add_column("Alpha%/yr", justify="right", width=10)
+    t.add_column("CAPM α%/yr", justify="right", width=11)
+    t.add_column("MF α%/yr", justify="right", width=10)
     t.add_column("Appraisal", justify="right", width=10)
-    t.add_column("Down β", justify="right", width=8)
-    t.add_column("Up β", justify="right", width=7)
     t.add_column("Convexity", justify="right", width=10)
-    t.add_column("R²", justify="right", width=6)
+    t.add_column("CAPM R²", justify="right", width=8)
+    t.add_column("MF R²", justify="right", width=7)
+
+    def _opt(v, fmt="{:+.1f}"):
+        return _c(v, hi=0, lo=0, fmt=fmt) if v is not None and v == v else "[dim]—[/dim]"
 
     for p in sorted(result.profiles, key=lambda x: x.appraisal_ratio, reverse=True):
         slv_c = _SLEEVE_STYLE.get(p.sleeve, "white")
@@ -49,11 +52,11 @@ def render_factor_table(result: PortfolioResult) -> Table:
             f"{p.beta:.2f}",
             f"{p.beta_lagged:.2f}",
             _c(p.alpha_annual, hi=0, lo=0, fmt="{:+.1f}"),
+            _opt(p.alpha_mf_annual),
             _c(p.appraisal_ratio, hi=0.3, lo=0, fmt="{:+.2f}"),
-            f"{p.downside_beta:.2f}" if p.downside_beta == p.downside_beta else "—",
-            f"{p.upside_beta:.2f}" if p.upside_beta == p.upside_beta else "—",
             _c(p.convexity, hi=0, lo=0, fmt="{:+.2f}"),
             f"{p.r_squared:.2f}",
+            f"{p.r_squared_mf:.2f}" if p.r_squared_mf is not None else "[dim]—[/dim]",
         )
     return t
 
