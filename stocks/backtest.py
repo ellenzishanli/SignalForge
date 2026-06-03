@@ -584,8 +584,12 @@ def run_backtest_and_display(console=None):
   OLS weight optimization: regressed raw factor scores against realized forward returns.
   Normalized positive coefficients give empirically-derived weights from this backtest period.{weight_note}
 
-  [dim]Note: 10 months of walk-forward data is a short sample. These results are illustrative.
-  A production system would use 5–10 years of data and proper transaction cost modeling.[/dim]""",
+  [yellow]Caveats (read before trusting any number above):[/yellow]
+  [dim]• Survivorship bias — the {loaded}-ticker universe is names still listed today; delisted/blown-up
+    losers were never in the sample, so realized returns will be LOWER than shown.
+  • One regime — this window is an AI bull market; the edge may not survive a different regime.
+  • Short sample — 10 monthly walk-forward points is illustrative; production needs 5–10 years.
+  The net-of-cost Sharpe and the per-period rank IC are the most honest figures here.[/dim]""",
         title="[bold cyan]Interpretation[/bold cyan]",
         border_style="cyan",
         padding=(1, 2),

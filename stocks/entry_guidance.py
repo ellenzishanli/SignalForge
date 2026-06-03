@@ -102,6 +102,38 @@ class EntryGuide:
     market_cap_b: Optional[float] = None
     liquidity_tier: str = ""      # DEEP | LARGE | MID | SMALL | MICRO
     est_slippage_pct: float = 0.0 # rough one-way slippage estimate, %
+    pe_ratio: Optional[float] = None
+    valuation_tag: str = ""       # CHEAP | FAIR | RICH | EXPENSIVE | n/a
+    trend_tag: str = ""           # ACCELERATING | STEADY | FADING — alpha-decay read
+
+
+def valuation_tag(pe_ratio: Optional[float]) -> str:
+    """Coarse 'is it expensive right now' read from the trailing P/E."""
+    if pe_ratio is None or pe_ratio <= 0:
+        return "n/a"
+    if pe_ratio < 15:  return "CHEAP"
+    if pe_ratio < 25:  return "FAIR"
+    if pe_ratio < 40:  return "RICH"
+    return "EXPENSIVE"
+
+
+def trend_tag(return_1m: Optional[float], return_6m: Optional[float]) -> str:
+    """
+    A simple alpha-decay read: is the recent pace faster or slower than the
+    6-month pace? ACCELERATING = momentum still building; FADING = rolling over.
+    (A cross-sectional snapshot can't see true alpha decay, but the change in
+    momentum is a cheap, honest proxy the model otherwise lacks.)
+    """
+    if return_1m is None or return_6m is None:
+        return ""
+    monthly_pace_6m = return_6m / 6.0
+    if return_1m > 0 and return_1m > monthly_pace_6m + 1.0:
+        return "ACCELERATING"
+    if return_1m < 0 and return_6m > 0:
+        return "FADING"
+    if return_1m < monthly_pace_6m - 1.0:
+        return "FADING"
+    return "STEADY"
 
 
 def liquidity_assessment(market_cap_b: Optional[float]) -> tuple:
@@ -170,25 +202,37 @@ def render_entry_guide_table(picks, top_n: int = 15):
     t.add_column("Last", justify="right", width=10)
     t.add_column("% off 52w High", justify="right", width=15)
     t.add_column("Suggested Limit", justify="right", width=18)
-    t.add_column("ETF Proxy", width=10)
-    t.add_column("Liquidity", width=10)
-    t.add_column("Note", width=44)
+    t.add_column("Valn (PE)", width=12)
+    t.add_column("Trend", width=12)
+    t.add_column("ETF", width=7)
+    t.add_column("Liq", width=7)
+    t.add_column("Note", width=40)
     _LIQ_C = {"DEEP": "green", "LARGE": "green", "MID": "cyan", "SMALL": "yellow", "MICRO": "red"}
+    _VAL_C = {"CHEAP": "green", "FAIR": "cyan", "RICH": "yellow", "EXPENSIVE": "red"}
+    _TRD_C = {"ACCELERATING": "green", "STEADY": "cyan", "FADING": "red"}
     ranked = sorted(picks, key=lambda x: x.opportunity_score, reverse=True)[:top_n]
     for p in ranked:
         s = p.stock
         g = build_entry_guide(s.ticker, getattr(s, "current_price", 0),
                               getattr(s, "pct_from_52w_high", 0.0), layer=getattr(p, "layer", ""),
-                              market_cap_b=getattr(s, "market_cap_b", None))
+                              market_cap_b=getattr(s, "market_cap_b", None),
+                              pe_ratio=getattr(s, "pe_ratio", None),
+                              return_1m=getattr(s, "return_1m", None),
+                              return_6m=getattr(s, "return_6m", None))
         if g is None:
             continue
         ext = g.pct_from_52w_high
         ext_c = "red" if ext >= -3 else "yellow" if ext >= -12 else "green"
         liq_c = _LIQ_C.get(g.liquidity_tier, "dim")
+        val_c = _VAL_C.get(g.valuation_tag, "dim")
+        trd_c = _TRD_C.get(g.trend_tag, "dim")
+        pe_str = f" ({g.pe_ratio:.0f})" if g.pe_ratio else ""
         t.add_row(
             g.ticker, f"${g.current_price:,.2f}",
             f"[{ext_c}]{ext:+.1f}%[/{ext_c}]",
             f"${g.limit_price:,.2f} [dim](−{g.limit_discount_pct:.1f}%)[/dim]",
+            f"[{val_c}]{g.valuation_tag}{pe_str}[/{val_c}]",
+            f"[{trd_c}]{g.trend_tag or '—'}[/{trd_c}]",
             f"[cyan]{g.etf_ticker}[/cyan]",
             f"[{liq_c}]{g.liquidity_tier or '—'}[/{liq_c}]",
             f"[dim]{g.note}[/dim]",
@@ -198,7 +242,8 @@ def render_entry_guide_table(picks, top_n: int = 15):
 
 def build_entry_guide(ticker: str, current_price: float, pct_from_52w_high: float,
                       layer: str = "", sector: str = "", gem_category: str = "",
-                      market_cap_b: Optional[float] = None) -> Optional[EntryGuide]:
+                      market_cap_b: Optional[float] = None, pe_ratio: Optional[float] = None,
+                      return_1m: Optional[float] = None, return_6m: Optional[float] = None) -> Optional[EntryGuide]:
     """Assemble the full entry plan for one name. Returns None if price missing."""
     if not current_price or current_price <= 0:
         return None
@@ -214,4 +259,6 @@ def build_entry_guide(ticker: str, current_price: float, pct_from_52w_high: floa
         etf_ticker=etf_t, etf_name=etf_n, note=note,
         market_cap_b=round(market_cap_b, 2) if market_cap_b is not None else None,
         liquidity_tier=tier, est_slippage_pct=slip,
+        pe_ratio=round(pe_ratio, 1) if pe_ratio else None,
+        valuation_tag=valuation_tag(pe_ratio), trend_tag=trend_tag(return_1m, return_6m),
     )

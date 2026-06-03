@@ -179,6 +179,18 @@ time produces higher compound returns with smaller drawdowns.
   manager/strategy risk.
 - **Diversification is not a hedge.** As Asness says, it won't save you in *every*
   drawdown — but over longer periods it really helps.
+- **Survivorship bias.** The universe is hand-picked from names that are *still
+  listed and still relevant today* — it excludes companies that were delisted,
+  acquired at a loss, or blew up (SPACs, failed biotechs, bankrupt miners). Real
+  out-of-sample returns will be lower than any backtest here, because the losers
+  that would have dragged the book down were never in the sample. Treat every
+  backtested return as an **optimistic upper bound**, and lean on the net-of-cost,
+  walk-forward **rank IC** (`--mode backtest`) as the more honest signal of edge.
+- **One-regime sample.** The 5-year window (2021–2026) is dominated by an AI bull
+  market; "alpha" learned here may be disguised high-beta growth exposure that
+  reverses in a different regime. This is why construction now ranks by *multi-
+  factor* alpha (stripping size/value/momentum/quality) and shrinks it toward the
+  mean rather than trusting raw single-factor alpha.
 - This is **research tooling, not investment advice.**
 
 ---

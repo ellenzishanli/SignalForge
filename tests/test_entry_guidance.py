@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from stocks.entry_guidance import (
     recommend_etf, suggest_limit_price, build_entry_guide, liquidity_assessment,
+    valuation_tag, trend_tag,
 )
 
 
@@ -90,3 +91,33 @@ class TestLiquidity:
     def test_large_cap_no_liquidity_warning_in_note(self):
         g = build_entry_guide("NVDA", 120.0, -5.0, layer="compute silicon", market_cap_b=3000.0)
         assert g.liquidity_tier == "DEEP"
+
+
+class TestValuationAndTrend:
+    def test_valuation_tags(self):
+        assert valuation_tag(10) == "CHEAP"
+        assert valuation_tag(20) == "FAIR"
+        assert valuation_tag(30) == "RICH"
+        assert valuation_tag(80) == "EXPENSIVE"
+        assert valuation_tag(None) == "n/a"
+        assert valuation_tag(-5) == "n/a"      # negative earnings
+
+    def test_trend_accelerating(self):
+        # recent monthly pace (+10%) faster than the 6m pace (~2%/mo)
+        assert trend_tag(10.0, 12.0) == "ACCELERATING"
+
+    def test_trend_fading(self):
+        assert trend_tag(-8.0, 30.0) == "FADING"   # rolling over after a big run
+
+    def test_trend_steady(self):
+        assert trend_tag(3.0, 18.0) == "STEADY"
+
+    def test_trend_missing(self):
+        assert trend_tag(None, 10.0) == ""
+
+    def test_entry_guide_carries_valuation_and_trend(self):
+        g = build_entry_guide("MU", 120.0, -5.0, layer="memory", market_cap_b=120.0,
+                              pe_ratio=14.0, return_1m=10.0, return_6m=12.0)
+        assert g.valuation_tag == "CHEAP"
+        assert g.trend_tag == "ACCELERATING"
+        assert g.pe_ratio == 14.0
