@@ -11,6 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from portfolio.factor_model import compute_factor_profile
 from portfolio.construction import construct_defensive_portfolio
+from portfolio.risk_parity import (
+    solve_risk_parity, risk_contributions, build_risk_parity_portfolio,
+)
 
 
 def _make_series(n=600, seed=0, beta=1.0, alpha_daily=0.0, noise=0.01):
@@ -91,3 +94,58 @@ class TestConstruction:
         hi = construct_defensive_portfolio(profs, target_beta=0.8)
         lo = construct_defensive_portfolio(profs, target_beta=0.3)
         assert lo.port_beta <= hi.port_beta + 0.05
+
+
+class TestRiskParity:
+    def test_equalizes_risk_contributions(self):
+        # Uncorrelated assets with very different variances: ERC must equalize RC.
+        cov = np.diag([0.04, 0.01, 0.0025])      # vols 20%, 10%, 5%
+        w = solve_risk_parity(cov)
+        assert abs(w.sum() - 1.0) < 1e-9
+        rc = risk_contributions(w, cov)
+        assert np.max(np.abs(rc - 1.0 / len(w))) < 1e-3
+
+    def test_low_vol_gets_more_weight(self):
+        # For uncorrelated assets, ERC weight should be inverse to volatility.
+        cov = np.diag([0.04, 0.01])              # asset 0 is 2× the vol of asset 1
+        w = solve_risk_parity(cov)
+        assert w[1] > w[0]                         # lower-vol asset carries more weight
+
+    def test_handles_correlation(self):
+        cov = np.array([[0.04, 0.012], [0.012, 0.01]])  # correlated, PSD
+        w = solve_risk_parity(cov)
+        rc = risk_contributions(w, cov)
+        assert np.max(np.abs(rc - 0.5)) < 1e-3
+        assert (w >= 0).all()
+
+    def _profiles_and_prices(self):
+        profs, prices = [], {}
+        specs = [
+            ("HIVOL", "alpha", 1.6, 0.0003, 0.020, 11),   # high idiosyncratic vol
+            ("MIDVOL", "alpha", 1.0, 0.0002, 0.010, 12),
+            ("LOVOL", "defensive", 0.4, 0.0001, 0.004, 13),  # low vol ballast
+            ("HEDGE", "convexity", -0.5, 0.0, 0.006, 14),
+        ]
+        for tk, slv, beta, a, noise, seed in specs:
+            stk, mkt = _make_series(beta=beta, alpha_daily=a, noise=noise, seed=seed)
+            p = compute_factor_profile(tk, tk, slv, stk, mkt)
+            assert p is not None
+            profs.append(p)
+            prices[tk] = stk
+        return profs, prices
+
+    def test_build_portfolio_weights_sum_to_one(self):
+        profs, prices = self._profiles_and_prices()
+        port = build_risk_parity_portfolio(profs, prices)
+        total = sum(h.weight for h in port.holdings) + port.cash_weight
+        assert abs(total - 1.0) < 0.02
+        assert all(h.weight >= 0 for h in port.holdings)
+
+    def test_build_portfolio_favors_low_vol(self):
+        profs, prices = self._profiles_and_prices()
+        # Loose cap so the risk-balance tilt is visible (with only 4 names a 25%
+        # cap would force equal weight: 4 × 25% = 100%).
+        port = build_risk_parity_portfolio(profs, prices, max_weight=0.6)
+        w = {h.profile.ticker: h.weight for h in port.holdings}
+        # The lowest-vol name should out-weight the highest-vol name.
+        assert w.get("LOVOL", 0) > w.get("HIVOL", 0)

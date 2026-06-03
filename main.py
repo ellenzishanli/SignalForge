@@ -40,6 +40,7 @@ from portfolio.engine import run_portfolio_engine
 from portfolio.display import (
     render_factor_table, render_portfolio_table,
     render_stress_panel, render_education_panel, build_portfolio_context,
+    render_risk_parity_table, render_method_comparison_panel,
 )
 from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analyze_ai_infrastructure, analyze_portfolio
 from analysis.llm_client import get_provider
@@ -119,6 +120,11 @@ def run_portfolio(target_beta: float = 0.60):
         display.print()
         display.print(render_stress_panel(result))
         display.print()
+        if result.rp_portfolio is not None:
+            display.print(render_risk_parity_table(result))
+            display.print()
+            display.print(render_method_comparison_panel(result))
+            display.print()
         display.print(Panel(
             Markdown(commentary),
             title="[bold green]Portfolio Strategist Commentary / 投资组合策略解读[/bold green]",
@@ -159,6 +165,22 @@ def _portfolio_report_md(result, commentary: str) -> str:
     for label, d in s.stress_windows.items():
         lines.append(f"- **{label}:** portfolio {d['port']:+.1f}% vs SPY {d['spy']:+.1f}%")
     lines.append("")
+
+    # ── Risk Parity comparison (Bridgewater All Weather) ──────────────────────
+    if result.rp_portfolio is not None and result.rp_stress is not None:
+        rp, rs = result.rp_portfolio, result.rp_stress
+        lines.append("### ⚖️ Risk Parity vs Defensive Alpha — Same Universe, Two Methods")
+        lines.append("")
+        lines.append("| Metric | 🛡️ Defensive Alpha | ⚖️ Risk Parity |")
+        lines.append("|--------|--------------------|----------------|")
+        lines.append(f"| Annual return | {s.port_ann_return:+.1f}% | {rs.port_ann_return:+.1f}% |")
+        lines.append(f"| Annual vol | {s.port_ann_vol:.1f}% | {rs.port_ann_vol:.1f}% |")
+        lines.append(f"| Sharpe | {s.port_sharpe:.2f} | {rs.port_sharpe:.2f} |")
+        lines.append(f"| Max drawdown | {s.port_max_drawdown:.1f}% | {rs.port_max_drawdown:.1f}% |")
+        lines.append(f"| Downside capture | {s.downside_capture:.2f} | {rs.downside_capture:.2f} |")
+        lines.append(f"| Portfolio beta | {pf.port_beta:.2f} | {rp.port_beta:.2f} |")
+        lines.append("")
+
     lines.append(commentary)
     return "\n".join(lines)
 

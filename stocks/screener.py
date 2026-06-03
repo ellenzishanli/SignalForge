@@ -48,6 +48,8 @@ class StockData:
     upside_to_target: Optional[float]
     sector: str
     is_etf: bool = False
+    debt_to_equity: Optional[float] = None   # leverage (×), for QMJ Safety pillar
+    return_on_equity: Optional[float] = None # ROE %, for QMJ Profitability pillar
     quant: Optional[QuantReport] = field(default=None, repr=False)
 
 
@@ -116,6 +118,8 @@ def fetch_stock_data(ticker: str, is_etf: bool = False) -> Optional[StockData]:
         rev_gr  = _safe(info.get("revenueGrowth"))
         earn_gr = _safe(info.get("earningsGrowth"))
         margin  = _safe(info.get("profitMargins"))
+        dte_raw = _safe(info.get("debtToEquity"))      # yfinance reports as % (e.g. 120 = 1.2×)
+        roe_raw = _safe(info.get("returnOnEquity"))    # fraction, e.g. 0.25 = 25%
         mkt_cap = _safe(info.get("marketCap"), 0) / 1e9
         target  = _safe(info.get("targetMeanPrice"))
         upside  = round((target-price)/price*100, 1) if target else None
@@ -140,6 +144,8 @@ def fetch_stock_data(ticker: str, is_etf: bool = False) -> Optional[StockData]:
             analyst_target=round(target,2) if target else None,
             upside_to_target=upside,
             sector=sector, is_etf=is_etf,
+            debt_to_equity=round(dte_raw/100, 2) if dte_raw is not None else None,
+            return_on_equity=round(roe_raw*100, 1) if roe_raw is not None else None,
         )
 
         # Attach quant report

@@ -77,6 +77,16 @@ lose far less when the market falls.**
 Weights ∝ appraisal ratio with a low-beta tilt (betting-against-beta), then the
 convexity sleeve is sized to pull whole-portfolio beta down to a **target (default 0.60)**.
 
+**⚖️ Second method — Risk Parity (Bridgewater "All Weather"):** the same universe is
+also built as an **Equal Risk Contribution** book, where position sizing ignores
+expected return entirely and instead equalizes each name's *share of portfolio
+volatility* (Maillard-Roncalli-Teiletche 2010, solved by cyclical coordinate
+descent). A 60/40 book is ~90% equity *risk* despite looking balanced by dollars;
+ERC scales low-vol ballast (bonds, gold, defensives) up and high-vol growth down
+until every holding carries its weight. The terminal renders both books **head-to-head**
+(annual return, vol, Sharpe, max drawdown, downside capture, beta) so you can see
+AQR's return-quality sizing vs Bridgewater's risk-balanced sizing on identical inputs.
+
 **Stress test — measures "win when the market is down":** downside/upside capture,
 capture ratio, win-rate in down months, max drawdown vs SPY, and cumulative return
 through historical selloffs (2022 inflation bear, 2025 tariff shock).
@@ -141,6 +151,7 @@ python3 main.py --mode whales
 | **ATR + Fibonacci** | Volatility regime + key support/resistance levels |
 | **Sharpe / Sortino / VaR** | Risk-adjusted return + tail risk |
 | **Multi-Factor Model** | Value 25% · Growth 30% · Quality 25% · Momentum 20% |
+| **QMJ Quality** | AQR "Quality Minus Junk" — Profitability · Growth · Safety pillars (margin, ROE, leverage) |
 | **GARP / PEG Ratio** | Growth At Reasonable Price scoring |
 | **Linear Regression ML** | Price slope, R², velocity, acceleration |
 
@@ -260,6 +271,7 @@ signalforge/
 ├── portfolio/                  # Defensive Alpha engine (AQR Total Portfolio Approach)
 │   ├── factor_model.py         # Beta-adjusted alpha: CAPM beta, Dimson beta, appraisal ratio, convexity
 │   ├── construction.py         # Appraisal-weighted + low-beta-tilt defensive constructor
+│   ├── risk_parity.py          # Equal Risk Contribution constructor (Bridgewater All Weather)
 │   ├── stress.py               # Downside/upside capture, drawdown, stress-window backtests
 │   ├── data.py                 # Parallel multi-year price fetcher
 │   ├── engine.py               # Orchestrator: data → factor model → construct → stress
@@ -310,7 +322,7 @@ GMAIL_APP_PASSWORD=your_16_char_app_password
 
 This project demonstrates end-to-end financial engineering across four pillars:
 
-**🛡️ Defensive Alpha Portfolio Engine** — CAPM factor model computing beta-adjusted alpha (appraisal ratio = alpha ÷ idiosyncratic vol), Dimson/lagged beta for true market sensitivity, betting-against-beta tilt, and a convexity sleeve (trend-following, anti-beta, gold, long bonds) sized to a target portfolio beta. Stress-tested with downside/upside capture, win-rate in down months, max drawdown vs SPY, and 2022 / 2025 historical selloff windows. Grounded in AQR's Total Portfolio Approach research.
+**🛡️ Defensive Alpha Portfolio Engine** — CAPM factor model computing beta-adjusted alpha (appraisal ratio = alpha ÷ idiosyncratic vol), Dimson/lagged beta for true market sensitivity, betting-against-beta tilt, and a convexity sleeve (trend-following, anti-beta, gold, long bonds) sized to a target portfolio beta. Includes a second construction method — **Equal Risk Contribution risk parity** (Bridgewater All Weather, solved by cyclical coordinate descent) — rendered head-to-head against the AQR book on the same universe. Stress-tested with downside/upside capture, win-rate in down months, max drawdown vs SPY, and 2022 / 2025 historical selloff windows. Grounded in AQR's Total Portfolio Approach and Maillard-Roncalli risk-budgeting research.
 
 **🛰️ AI Infrastructure Value Chain** — ~50 picks-and-shovels names scored across 8 layers (compute silicon, foundry, memory, networking/optics, servers/cooling, neoclouds, power, hyperscalers) with a custom Opportunity Score rewarding fair valuation + high growth + analyst upside before market re-rating.
 
@@ -322,8 +334,8 @@ This project demonstrates end-to-end financial engineering across four pillars:
 
 | Skill | Implementation |
 |-------|---------------|
-| **Portfolio construction** | CAPM factor model, Jensen's alpha, appraisal ratio, Dimson/lagged beta, betting-against-beta, downside/upside capture, convexity, AQR Total Portfolio Approach |
-| **Quantitative finance** | Kalman filter, Markov chain regime detection, Hurst exponent, Sharpe/Sortino/VaR/CVaR, multi-factor models, GARP/PEG, walk-forward backtesting |
+| **Portfolio construction** | CAPM factor model, Jensen's alpha, appraisal ratio, Dimson/lagged beta, betting-against-beta, convexity, AQR Total Portfolio Approach, risk parity / Equal Risk Contribution (Bridgewater All Weather) |
+| **Quantitative finance** | Kalman filter, Markov chain regime detection, Hurst exponent, Sharpe/Sortino/VaR/CVaR, multi-factor models, AQR Quality Minus Junk (QMJ), GARP/PEG, walk-forward backtesting |
 | **Data engineering** | Multi-source ingestion: SEC EDGAR 13F, Finviz, Yahoo Finance, StockTwits, Reddit, GitHub, RSS, with concurrent thread-pool architecture and global rate limiting |
 | **Systems design** | Modular CLI (8 modes), thread-safe caches, automated cron scheduling, HTML email delivery, idempotent installers |
 | **AI/LLM integration** | Multi-provider client (Groq/Claude/Gemini/Ollama), bilingual sell-side research, macro event analysis, portfolio strategist commentary |

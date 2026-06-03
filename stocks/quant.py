@@ -112,6 +112,13 @@ class FundamentalScore:
     Multi-factor fundamental model (Value/Growth/Quality/Momentum).
     Weights: Value 25% | Growth 30% | Quality 25% | Momentum 20%.
     PEG = PE / earnings_growth_rate (<1 = cheap for growth, GARP ideal).
+
+    The Quality leg is an AQR "Quality Minus Junk" (Asness-Frazzini-Pedersen 2019)
+    composite of three pillars, each 0-10 — exposed below so the thesis can name
+    *why* a name scores as quality (or junk):
+      qmj_profitability — net margin + ROE (does it earn high returns on capital?)
+      qmj_growth        — prior growth in earnings & revenue (is quality rising?)
+      qmj_safety        — low leverage + positive, stable earnings (will it survive?)
     """
     value_score: float
     growth_score: float
@@ -120,6 +127,10 @@ class FundamentalScore:
     composite_score: float          # 0-10
     peg_ratio: Optional[float]
     garp_rating: str
+    # QMJ Quality pillars (0-10 each); default None for back-compat construction.
+    qmj_profitability: Optional[float] = None
+    qmj_growth: Optional[float] = None
+    qmj_safety: Optional[float] = None
 
 
 @dataclass
@@ -312,11 +323,47 @@ def _compute_fundamental(sd) -> FundamentalScore:
         if earn: s += 2 if earn>50 else 1 if earn>20 else -1 if earn<0 else 0
         return round(float(np.clip(s,0,10)),2)
 
-    def qlt_s(margin, upside):
-        s = 5.0
-        if margin: s += 3 if margin>30 else 1.5 if margin>15 else 0.5 if margin>0 else -2
-        if upside and upside > 20: s += 1
-        return round(float(np.clip(s,0,10)),2)
+    def qmj_quality(sd):
+        """
+        AQR Quality Minus Junk — three pillars, each mapped to 0-10:
+          Profitability (net margin + ROE), Growth (prior earnings/revenue growth),
+          Safety (low leverage + positive earnings). Quality = their average.
+        Returns (quality, profitability, growth, safety).
+        """
+        margin = getattr(sd, "profit_margin", None)
+        rev    = getattr(sd, "revenue_growth", None)
+        earn   = getattr(sd, "earnings_growth", None)
+        roe    = getattr(sd, "return_on_equity", None)   # %
+        dte    = getattr(sd, "debt_to_equity", None)     # leverage in ×
+        upside = getattr(sd, "upside_to_target", None)
+
+        # ── Profitability — high returns on capital ──
+        prof = 5.0
+        if margin is not None:
+            prof += 3 if margin > 25 else 1.5 if margin > 12 else 0.5 if margin > 0 else -3
+        if roe is not None:
+            prof += 2 if roe > 25 else 1 if roe > 12 else 0 if roe >= 0 else -1.5
+        prof = round(float(np.clip(prof, 0, 10)), 2)
+
+        # ── Growth — is the quality rising? ──
+        grow = 5.0
+        if earn is not None:
+            grow += 2.5 if earn > 25 else 1.5 if earn > 10 else 0 if earn >= 0 else -2.5
+        if rev is not None:
+            grow += 2.5 if rev > 25 else 1.5 if rev > 10 else 0 if rev >= 0 else -2.0
+        grow = round(float(np.clip(grow, 0, 10)), 2)
+
+        # ── Safety — low leverage, profitable, analyst support ──
+        safe = 5.0
+        if dte is not None:
+            safe += 3 if dte < 0.3 else 1.5 if dte < 0.7 else 0 if dte < 1.5 else -2 if dte < 3 else -3
+        if earn is not None and earn > 0: safe += 1
+        if margin is not None and margin > 10: safe += 0.5
+        if upside is not None and upside > 20: safe += 0.5
+        safe = round(float(np.clip(safe, 0, 10)), 2)
+
+        quality = round((prof + grow + safe) / 3, 2)
+        return quality, prof, grow, safe
 
     def mom_s(r1m, r6m, r1y):
         s = 5.0
@@ -327,7 +374,7 @@ def _compute_fundamental(sd) -> FundamentalScore:
 
     v = val_s(sd.pe_ratio, sd.pb_ratio, sd.ps_ratio)
     g = grw_s(sd.revenue_growth, sd.earnings_growth)
-    q = qlt_s(sd.profit_margin, sd.upside_to_target)
+    q, q_prof, q_grow, q_safe = qmj_quality(sd)
     m = mom_s(sd.return_1m, sd.return_6m, sd.return_1y)
     composite = round(0.25*v + 0.30*g + 0.25*q + 0.20*m, 2)
 
@@ -342,7 +389,8 @@ def _compute_fundamental(sd) -> FundamentalScore:
     else:
         garp = "N/A"
 
-    return FundamentalScore(v, g, q, m, composite, peg, garp)
+    return FundamentalScore(v, g, q, m, composite, peg, garp,
+                            qmj_profitability=q_prof, qmj_growth=q_grow, qmj_safety=q_safe)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -428,6 +476,7 @@ def build_quant_report(sd, closes: pd.Series, hist_df: pd.DataFrame = None) -> Q
     if hu.interpretation == "MEAN_REVERTING":parts.append(f"Hurst={hu.hurst:.2f}(mean-rev)")
     if mc.prob_bull_tomorrow > 0.55:         parts.append(f"Markov P(bull)={mc.prob_bull_tomorrow:.0%}")
     if fund.garp_rating in ("CHEAP","FAIR"): parts.append(f"GARP={fund.garp_rating}")
+    if fund.quality_score >= 7.5:            parts.append(f"high quality (QMJ={fund.quality_score:.1f})")
     if ml.trend_signal in ("STRONG_UP","UP"):parts.append(f"ML trend up (R²={ml.r_squared_20d:.2f})")
     if not parts:                            parts.append("no strong directional signal")
 

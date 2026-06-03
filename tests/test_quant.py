@@ -18,6 +18,7 @@ from stocks.quant import (
     _compute_hurst,
     _compute_mean_reversion,
     _compute_statistical,
+    _compute_fundamental,
     build_quant_report,
 )
 
@@ -180,3 +181,53 @@ class TestBuildQuantReport:
         sd.is_etf = True
         report = build_quant_report(sd, trending_prices, ohlcv_df)
         assert 0 <= report.overall_quant_score <= 100
+
+
+class TestQMJQuality:
+    """AQR Quality Minus Junk — Profitability / Growth / Safety pillars."""
+
+    def _sd(self, **over):
+        base = dict(
+            pe_ratio=20.0, pb_ratio=3.0, ps_ratio=5.0, forward_pe=18.0,
+            revenue_growth=15.0, earnings_growth=20.0, profit_margin=18.0,
+            return_1m=2.0, return_6m=10.0, return_1y=25.0, upside_to_target=12.0,
+            return_on_equity=22.0, debt_to_equity=0.4,
+        )
+        base.update(over)
+        return SimpleNamespace(**base)
+
+    def test_pillars_populated_and_in_range(self):
+        f = _compute_fundamental(self._sd())
+        for p in (f.qmj_profitability, f.qmj_growth, f.qmj_safety):
+            assert p is not None and 0 <= p <= 10
+        assert 0 <= f.quality_score <= 10
+
+    def test_quality_is_pillar_average(self):
+        f = _compute_fundamental(self._sd())
+        avg = round((f.qmj_profitability + f.qmj_growth + f.qmj_safety) / 3, 2)
+        assert abs(f.quality_score - avg) < 0.01
+
+    def test_high_quality_beats_junk(self):
+        # Profitable, growing, low-leverage vs unprofitable, shrinking, levered.
+        good = _compute_fundamental(self._sd(
+            profit_margin=30.0, return_on_equity=35.0, earnings_growth=40.0,
+            revenue_growth=35.0, debt_to_equity=0.2))
+        junk = _compute_fundamental(self._sd(
+            profit_margin=-5.0, return_on_equity=-10.0, earnings_growth=-20.0,
+            revenue_growth=-10.0, debt_to_equity=4.0))
+        assert good.quality_score > junk.quality_score
+        assert good.qmj_safety > junk.qmj_safety
+
+    def test_leverage_lowers_safety(self):
+        low_lev = _compute_fundamental(self._sd(debt_to_equity=0.1))
+        high_lev = _compute_fundamental(self._sd(debt_to_equity=3.5))
+        assert low_lev.qmj_safety > high_lev.qmj_safety
+
+    def test_missing_fields_still_scores(self):
+        # No ROE / leverage available — should still return neutral-ish quality.
+        sd = SimpleNamespace(
+            pe_ratio=20.0, pb_ratio=3.0, ps_ratio=5.0, forward_pe=18.0,
+            revenue_growth=None, earnings_growth=None, profit_margin=None,
+            return_1m=0.0, return_6m=0.0, return_1y=0.0, upside_to_target=None)
+        f = _compute_fundamental(sd)
+        assert 0 <= f.quality_score <= 10

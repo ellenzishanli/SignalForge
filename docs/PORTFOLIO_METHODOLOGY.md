@@ -119,6 +119,38 @@ us trend exposure; **BTAL** is literally long low-beta / short high-beta.
 
 ---
 
+## 5b. A second lens — Risk Parity (Bridgewater "All Weather")
+
+The Defensive Alpha book above sizes positions by *return quality* (appraisal
+ratio). Risk Parity asks a different question entirely: **forget expected return —
+what if every holding contributed the same amount of risk?**
+
+The motivation is Bridgewater's classic observation about 60/40. It *looks*
+balanced by dollars, but stocks are ~3–4× as volatile as bonds, so ~90% of the
+portfolio's day-to-day P&L is driven by equities. The bonds are along for the
+ride. **Equalizing risk contribution** instead of dollars fixes that.
+
+Formally, with covariance matrix Σ and weights w:
+
+- Portfolio vol: σ(w) = √(wᵀΣw)
+- Asset *i*'s risk contribution: RCᵢ = wᵢ · (Σw)ᵢ / σ(w), and Σᵢ RCᵢ = σ(w)
+- **Equal Risk Contribution (ERC):** choose w so RCᵢ = σ(w)/n for every *i*.
+
+We solve it with **cyclical coordinate descent** (Griveau-Billion, Richard &
+Roncalli 2013): sweep through the assets, and for each one solve the 1-D quadratic
+that sets its risk contribution to target while holding the others fixed. It is
+long-only by construction and converges in a few sweeps. The effect: low-vol
+ballast (bonds, gold, defensives) is scaled **up**, high-vol growth scaled
+**down**, until the risk budget is even.
+
+The terminal builds *both* books on the **same universe** and prints them
+head-to-head — AQR's return-quality sizing vs Bridgewater's risk-balanced sizing —
+on annual return, vol, Sharpe, max drawdown, downside capture and beta. Neither is
+strictly "better": Defensive Alpha leans on a return view, Risk Parity makes no
+return forecast at all and is more robust when those forecasts are wrong.
+
+---
+
 ## 6. The payoff — how we measure "win when the market is down"
 
 The stress test builds the portfolio's daily return series and asks:
@@ -160,3 +192,10 @@ time produces higher compound returns with smaller drawdowns.
 - Asness et al., *Do Hedge Funds Hedge?* (lagged/Dimson betas, understated exposure).
 - Asness, *Journal of Private Markets Investing*, Spring 2026 (volatility laundering;
   trend-following as the best "doom scenario" diversifier).
+- Maillard, Roncalli & Teiletche, *The Properties of Equally Weighted Risk
+  Contribution Portfolios* (2010) — the risk parity / ERC framework.
+- Griveau-Billion, Richard & Roncalli, *A Fast Algorithm for Computing High-
+  Dimensional Risk Parity Portfolios* (2013) — the cyclical coordinate descent solver.
+- Bridgewater Associates, *The All Weather Story* — risk-balanced asset allocation.
+- Asness, Frazzini & Pedersen, *Quality Minus Junk* (2019) — the QMJ quality factor
+  (profitability, growth, safety) used in the stock-level fundamental score.
