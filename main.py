@@ -48,7 +48,7 @@ from analysis.headline_trades import analyze_headline_trades, render_headline_tr
 from analysis.emailer import send_daily_report, check_email_config
 from analysis.report_builder import (
     ai_infra_section_md, whales_section_md, etf_section_md,
-    sectors_section_md, gems_section_md,
+    sectors_section_md, gems_section_md, entry_guide_section_md,
 )
 from config.universe import SECTORS
 
@@ -217,6 +217,9 @@ def run_ai_infra():
         display.print()
         display.print(render_opportunity_leaderboard(picks, top_n=20))
         display.print()
+        from stocks.entry_guidance import render_entry_guide_table
+        display.print(render_entry_guide_table(picks, top_n=15))
+        display.print()
         display.print(Rule("[dim]Value-chain breakdown by layer[/dim]"))
         display.print()
 
@@ -377,6 +380,8 @@ def run_tech_radar():
         f.write(f"# Frontier Tech Radar — {TODAY}\n\n")
         _section(f, "🛰️ AI Infrastructure Value Chain",
                  ai_infra_section_md(ai_picks, ai_infra_analysis))
+        _section(f, "🎯 Actionable Entry Guide",
+                 entry_guide_section_md(ai_picks))
         _section(f, "🛡️ Defensive Alpha — Portfolio Construction",
                  portfolio_report_md)
         _section(f, "🐋 Smart Money — Whale & Insider Tracker",

@@ -68,6 +68,40 @@ def ai_infra_section_md(picks: List, analysis: str = "", top_n: int = 20) -> str
     return "\n".join(lines)
 
 
+# ── Actionable entry guide (ETF proxy + limit price + 52w position) ──────────
+def entry_guide_section_md(picks: List, top_n: int = 15) -> str:
+    """For the top opportunity picks: where they sit vs the 52-week high, a
+    disciplined suggested limit price, and the closest ETF proxy to buy instead
+    of the single name."""
+    from stocks.entry_guidance import build_entry_guide
+    if not picks:
+        return ""
+    ranked = sorted(picks, key=lambda x: x.opportunity_score, reverse=True)[:top_n]
+    rows = []
+    for p in ranked:
+        s = p.stock
+        g = build_entry_guide(
+            s.ticker, getattr(s, "current_price", 0),
+            getattr(s, "pct_from_52w_high", 0.0), layer=getattr(p, "layer", ""),
+        )
+        if g is None:
+            continue
+        rows.append(
+            f"| {g.ticker} | ${_f(g.current_price, '{:,.2f}')} | {_f(g.pct_from_52w_high, '{:+.1f}%')} | "
+            f"${_f(g.limit_price, '{:,.2f}')} (−{g.limit_discount_pct:.1f}%) | "
+            f"{g.etf_ticker} | {g.note} |"
+        )
+    if not rows:
+        return ""
+    head = ("### 🎯 Actionable Entry Guide — Limit Price & ETF Proxy\n\n"
+            "_Suggested limits are disciplined pullback entries (bigger discount the "
+            "closer a name trades to its 52-week high). The ETF proxy is the closest "
+            "liquid basket if you'd rather not hold the single name._\n\n"
+            "| Ticker | Last | % off 52w High | Suggested Limit | ETF Proxy | Note |\n"
+            "|--------|------|----------------|-----------------|-----------|------|")
+    return head + "\n" + "\n".join(rows) + "\n"
+
+
 # ── Whale / Smart Money ─────────────────────────────────────────────────────
 def whales_section_md(trades: List, top_n: int = 25) -> str:
     """Consolidated whale holdings + the strongest new/increased buy signals."""
