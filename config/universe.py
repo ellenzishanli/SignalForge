@@ -216,6 +216,55 @@ AI_INFRASTRUCTURE = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PORTFOLIO CONSTRUCTION UNIVERSE — "Defensive Alpha"
+# ══════════════════════════════════════════════════════════════════════════════
+# Built to demonstrate AQR's Total Portfolio Approach: pair return-seeking growth
+# (high beta-adjusted alpha) with genuine RISK MITIGATORS that add convexity —
+# the goal is a portfolio that keeps most of the upside but loses far less when
+# the market falls. Three sleeves:
+#
+#   1. ALPHA sleeve     — high-conviction growth/AI names (the return engine)
+#   2. DEFENSIVE sleeve — low-beta equity ballast (utilities, staples, healthcare,
+#                         quality dividend, Berkshire) that falls less in selloffs
+#   3. CONVEXITY sleeve — true diversifiers AQR identifies as the best crisis hedges:
+#                         DBMF/KMLM = managed-futures TREND FOLLOWING (the #1 convex
+#                         diversifier in AQR's research), BTAL = betting-against-beta
+#                         (long low-beta / short high-beta), GLD = gold, TLT = long bonds.
+#
+# The factor model computes beta-adjusted alpha (appraisal ratio) for every name;
+# the constructor then weights by appraisal ratio while tilting toward low beta and
+# convexity to hit a target portfolio beta well below 1.0.
+
+PORTFOLIO_UNIVERSE = {
+    "alpha": [
+        # Return-seeking growth — the AI infrastructure winners
+        ("NVDA", "Nvidia"),            ("AVGO", "Broadcom"),
+        ("MSFT", "Microsoft"),         ("META", "Meta Platforms"),
+        ("GOOGL","Alphabet"),          ("AMZN", "Amazon"),
+        ("ANET", "Arista Networks"),   ("VRT",  "Vertiv"),
+        ("CEG",  "Constellation Energy"), ("GEV", "GE Vernova"),
+        ("PLTR", "Palantir"),          ("NOW",  "ServiceNow"),
+    ],
+    "defensive": [
+        # Low-beta equity ballast — falls less when the market drops
+        ("BRK-B","Berkshire Hathaway"),
+        ("COST", "Costco"),            ("WM",   "Waste Management"),
+        ("XLU",  "Utilities Sector"),  ("XLP",  "Consumer Staples Sector"),
+        ("XLV",  "Health Care Sector"),("SCHD", "Schwab US Dividend Equity"),
+        ("USMV", "iShares Min Volatility"),
+    ],
+    "convexity": [
+        # The AQR convexity playbook — true crisis diversifiers
+        ("DBMF", "managed futures / trend following"),
+        ("KMLM", "Mount Lucas managed futures"),
+        ("BTAL", "anti-beta (long low-beta / short high-beta)"),
+        ("GLD",  "gold"),
+        ("TLT",  "20+ year Treasuries"),
+    ],
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # FULL ETF UNIVERSE — all sectors, not just tech
 # ══════════════════════════════════════════════════════════════════════════════
 

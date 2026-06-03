@@ -4,6 +4,7 @@ SignalForge
 Modes:
   full     — AI infra + whales + stocks (all sectors + gems + ETF) + tech briefing
   aii      — AI Infrastructure value-chain scan (hunt the 'next Micron')
+  portfolio— Defensive Alpha: beta-adjusted alpha + downside-protected construction
   stocks   — sector scan + hidden gems + ETF (no tech news)
   briefing — tech news only (no stocks)
   gems     — hidden gems only (fastest)
@@ -34,6 +35,11 @@ from stocks.hidden_gems import scan_hidden_gems, render_hidden_gems_table
 from stocks.ai_infrastructure import (
     scan_ai_infrastructure, render_opportunity_leaderboard,
     render_layer_table, build_ai_infra_context,
+)
+from portfolio.engine import run_portfolio_engine
+from portfolio.display import (
+    render_factor_table, render_portfolio_table,
+    render_stress_panel, render_education_panel,
 )
 from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analyze_ai_infrastructure
 from analysis.llm_client import get_provider
@@ -74,6 +80,44 @@ def run_headline_trades() -> str:
         display.print(_SCROLL_HINT)
 
     return analysis
+
+
+def run_portfolio(target_beta: float = 0.60):
+    """
+    Defensive portfolio engine — beta-adjusted alpha + AQR-style construction.
+    Builds a portfolio designed to keep most of the upside while losing far less
+    when the market falls. Returns nothing (renders to pager).
+    """
+    console.print(Rule(f"[bold green]🛡️  Defensive Alpha — Portfolio Construction — {TODAY}[/bold green]"))
+    console.print("[dim]Beta-adjusted alpha (appraisal ratio) + convexity sleeve → win when the market is down[/dim]\n")
+
+    console.print("[bold]📊 Fetching 5y price histories + SPY benchmark...[/bold]")
+    with console.status("Fetching universe...") as status:
+        def _progress(done, tot):
+            status.update(f"Fetching price histories... {done}/{tot}")
+        result = run_portfolio_engine(target_beta=target_beta, progress=_progress)
+    console.print(f"  ✓ {len(result.profiles)} names modeled vs SPY\n")
+
+    pf, s = result.portfolio, result.stress
+    console.print(f"  ✓ Portfolio beta {pf.port_beta:.2f} | downside capture {s.downside_capture:.2f} | "
+                  f"wins {s.win_rate_down_months:.0f}% of down months\n")
+    console.print("  Opening full analysis in pager...\n")
+
+    display = Console(width=280)
+    with display.pager(styles=True):
+        display.print(Rule(f"[bold green]🛡️  Defensive Alpha — {TODAY}[/bold green]"))
+        display.print()
+        display.print(render_education_panel())
+        display.print()
+        display.print(render_factor_table(result))
+        display.print()
+        display.print(render_portfolio_table(result))
+        display.print()
+        display.print(render_stress_panel(result))
+        display.print()
+        display.print(_SCROLL_HINT)
+
+    return result
 
 
 def run_ai_infra():
@@ -362,7 +406,8 @@ def run_backtest_mode():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Frontier Tech Radar")
-    parser.add_argument("--mode", choices=["full", "aii", "stocks", "briefing", "gems", "whales", "backtest", "email"], default="full")
+    parser.add_argument("--mode", choices=["full", "aii", "portfolio", "stocks", "briefing", "gems", "whales", "backtest", "email"], default="full")
+    parser.add_argument("--target-beta", type=float, default=0.60, help="Target portfolio beta for --mode portfolio (default 0.60)")
     args = parser.parse_args()
 
     provider = get_provider()
@@ -371,6 +416,7 @@ if __name__ == "__main__":
 
     if args.mode == "full":         run_tech_radar()
     elif args.mode == "aii":        run_ai_infra()
+    elif args.mode == "portfolio":  run_portfolio(target_beta=args.target_beta)
     elif args.mode == "stocks":     run_stocks()
     elif args.mode == "briefing":   run_briefing_only()
     elif args.mode == "gems":       run_gems_only()

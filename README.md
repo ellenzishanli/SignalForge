@@ -50,6 +50,46 @@ python3 main.py --mode aii
 
 ---
 
+### 🛡️ Defensive Alpha — Portfolio Construction (`--mode portfolio`)
+
+A beta-adjusted alpha engine + downside-protected portfolio constructor, built on
+**AQR's Total Portfolio Approach** research. The goal: **keep most of the upside,
+lose far less when the market falls.**
+
+**Beta-adjusted alpha** — every name's return is split into the free market ride
+(**beta**) and genuine unique edge (**alpha**), then scored by the **appraisal ratio**
+(alpha ÷ idiosyncratic vol — AQR's prescribed weighting metric):
+
+| Metric | What it captures |
+|--------|-----------------|
+| **Beta** | Market sensitivity — the part you can buy free from an index |
+| **Dimson β** | "True" beta incl. 1-day lag (Asness: plain beta understates real risk) |
+| **Alpha (Jensen's)** | Annualized return left after stripping out beta |
+| **Appraisal ratio** | Beta-adjusted alpha score = alpha ÷ idiosyncratic vol |
+| **Convexity** | Up-beta − down-beta (positive = participate up, resist down) |
+
+**Three-sleeve construction:**
+- 🟢 **Alpha** — high beta-adjusted-alpha growth (the return engine)
+- 🔵 **Defensive** — low-beta ballast (BRK-B, COST, XLU, XLP, XLV, SCHD)
+- 🟣 **Convexity** — the AQR crisis-diversifier playbook: **DBMF/KMLM** (managed-futures
+  trend-following — AQR's #1 convex diversifier), **BTAL** (anti-beta), **GLD**, **TLT**
+
+Weights ∝ appraisal ratio with a low-beta tilt (betting-against-beta), then the
+convexity sleeve is sized to pull whole-portfolio beta down to a **target (default 0.60)**.
+
+**Stress test — measures "win when the market is down":** downside/upside capture,
+capture ratio, win-rate in down months, max drawdown vs SPY, and cumulative return
+through historical selloffs (2022 inflation bear, 2025 tariff shock).
+
+```bash
+python3 main.py --mode portfolio                  # target beta 0.60
+python3 main.py --mode portfolio --target-beta 0.4  # more defensive
+```
+
+> 📘 Full concept primer: [`docs/PORTFOLIO_METHODOLOGY.md`](docs/PORTFOLIO_METHODOLOGY.md)
+
+---
+
 ### 🐋 Whale Tracker — Smart Money Intelligence (`--mode whales`)
 
 Track what the world's best investors are actually buying — parsed live from SEC filings, congressional disclosures, and social signals. 23 funds, 7 tabs.
@@ -140,6 +180,9 @@ cp .env.example .env
 # AI Infrastructure value chain — hunt the "next Micron"
 python3 main.py --mode aii
 
+# Defensive Alpha — beta-adjusted alpha + downside-protected portfolio
+python3 main.py --mode portfolio
+
 # Smart money tracker — 23 hedge funds, 7 tabs
 python3 main.py --mode whales
 
@@ -214,6 +257,13 @@ signalforge/
 │   ├── screener.py             # Discount buy signals + GARP value picks
 │   ├── backtest.py             # Walk-forward backtester + OLS weight optimization
 │   └── data_enrichment.py      # Finviz scraper — short interest, analyst ratings
+├── portfolio/                  # Defensive Alpha engine (AQR Total Portfolio Approach)
+│   ├── factor_model.py         # Beta-adjusted alpha: CAPM beta, Dimson beta, appraisal ratio, convexity
+│   ├── construction.py         # Appraisal-weighted + low-beta-tilt defensive constructor
+│   ├── stress.py               # Downside/upside capture, drawdown, stress-window backtests
+│   ├── data.py                 # Parallel multi-year price fetcher
+│   ├── engine.py               # Orchestrator: data → factor model → construct → stress
+│   └── display.py              # Rich tables + concept primer
 ├── whales/
 │   ├── whale_display.py        # Whale tracker — 7 tabs, quant enrichment, novelty ranking
 │   ├── sec_13f.py              # SEC EDGAR 13F parser — rate-limited, parallel, no re-downloads
@@ -263,6 +313,7 @@ This project demonstrates end-to-end financial engineering skills:
 | Skill | Implementation |
 |-------|---------------|
 | **Quantitative finance** | Kalman filter, Markov chains, Hurst exponent, Sharpe/Sortino/VaR, multi-factor models, GARP/PEG |
+| **Portfolio construction** | CAPM factor model, Jensen's alpha, appraisal ratio, Dimson/lagged beta, betting-against-beta, convexity & downside-capture, AQR Total Portfolio Approach |
 | **Data engineering** | Multi-source scraping: SEC EDGAR, Finviz, Yahoo Finance, StockTwits, Reddit, GitHub, RSS |
 | **Systems design** | Concurrent architecture, global rate limiting, modular CLI, automated scheduling |
 | **AI/LLM integration** | Multi-provider LLM client, bilingual sell-side research, macro event analysis |
