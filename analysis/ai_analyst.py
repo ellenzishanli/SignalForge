@@ -293,6 +293,44 @@ under a "## 中文分析" heading with the same structure."""
     return call_llm(prompt, max_tokens=2000)
 
 
+def analyze_portfolio(context: str) -> str:
+    """
+    Plain-English commentary on the defensive portfolio: what it's doing, why it
+    should hold up in a selloff, and what the risks/tradeoffs are. Bilingual.
+    """
+    prompt = f"""You are a portfolio strategist explaining a quantitatively-
+constructed DEFENSIVE portfolio to an investor. The portfolio is built on AQR's
+Total Portfolio Approach: it weights names by their appraisal ratio (beta-adjusted
+alpha = alpha / idiosyncratic vol), tilts toward low beta (betting-against-beta),
+and adds a convexity sleeve (trend-following DBMF/KMLM, anti-beta BTAL, gold, long
+bonds) to pull whole-portfolio beta below the market. The goal: keep most of the
+upside but lose far less when the market falls.
+
+Here are the constructed portfolio's holdings and stress-test results:
+
+{context}
+
+Today: {TODAY}.
+
+Write a concise, plain-English briefing in this exact structure:
+
+## 🛡️ What This Portfolio Is Doing
+2–3 sentences: the big-picture strategy and how the three sleeves (alpha / defensive
+/ convexity) work together. Reference the actual beta and downside-capture numbers.
+
+## 💪 Why It Should Hold Up in a Selloff
+2–3 sentences grounded in the stress-test numbers (downside capture, win-rate in
+down months, 2022/2025 stress windows). Explain it like you would to a smart friend.
+
+## ⚖️ The Tradeoffs & Risks
+2–3 sentences: what you give up for this protection (e.g., upside capture < 1,
+backward-looking estimates, ETF proxy/manager risk), and who this suits.
+
+Keep it tight and decision-useful — no filler, no hype. Then provide a full 中文
+translation under a "## 中文分析" heading with the same structure."""
+    return call_llm(prompt, max_tokens=1800)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TECH BRIEFING (sell-side style, bilingual)
 # ══════════════════════════════════════════════════════════════════════════════

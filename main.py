@@ -39,9 +39,9 @@ from stocks.ai_infrastructure import (
 from portfolio.engine import run_portfolio_engine
 from portfolio.display import (
     render_factor_table, render_portfolio_table,
-    render_stress_panel, render_education_panel,
+    render_stress_panel, render_education_panel, build_portfolio_context,
 )
-from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analyze_ai_infrastructure
+from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analyze_ai_infrastructure, analyze_portfolio
 from analysis.llm_client import get_provider
 from analysis.headline_trades import analyze_headline_trades, render_headline_trades_panel
 from analysis.emailer import send_daily_report, check_email_config
@@ -101,7 +101,11 @@ def run_portfolio(target_beta: float = 0.60):
     pf, s = result.portfolio, result.stress
     console.print(f"  ✓ Portfolio beta {pf.port_beta:.2f} | downside capture {s.downside_capture:.2f} | "
                   f"wins {s.win_rate_down_months:.0f}% of down months\n")
-    console.print("  Opening full analysis in pager...\n")
+
+    console.print("[bold yellow]🧠 Generating plain-English portfolio commentary (EN + 中文)...[/bold yellow]")
+    with console.status("AI explaining the strategy..."):
+        commentary = analyze_portfolio(build_portfolio_context(result))
+    console.print("  ✓ Commentary done — opening in pager...\n")
 
     display = Console(width=280)
     with display.pager(styles=True):
@@ -115,9 +119,48 @@ def run_portfolio(target_beta: float = 0.60):
         display.print()
         display.print(render_stress_panel(result))
         display.print()
+        display.print(Panel(
+            Markdown(commentary),
+            title="[bold green]Portfolio Strategist Commentary / 投资组合策略解读[/bold green]",
+            border_style="green", padding=(1, 2),
+        ))
+        display.print()
         display.print(_SCROLL_HINT)
 
-    return result
+    # Build a markdown section for the email/report.
+    report_md = _portfolio_report_md(result, commentary)
+    return result, report_md
+
+
+def _portfolio_report_md(result, commentary: str) -> str:
+    """Plain-markdown rendering of the portfolio for the email report."""
+    pf, s = result.portfolio, result.stress
+    lines = []
+    lines.append("### 🛡️ Defensive Portfolio — Holdings")
+    lines.append("")
+    lines.append("| Ticker | Name | Sleeve | Weight | Beta | Alpha%/yr | Appraisal |")
+    lines.append("|--------|------|--------|--------|------|-----------|-----------|")
+    for h in result.portfolio.holdings:
+        p = h.profile
+        lines.append(f"| {p.ticker} | {p.name} | {p.sleeve} | {h.weight*100:.1f}% | "
+                     f"{p.beta_lagged:.2f} | {p.alpha_annual:+.1f} | {p.appraisal_ratio:+.2f} |")
+    if pf.cash_weight > 0.005:
+        lines.append(f"| CASH | Cash | cash | {pf.cash_weight*100:.1f}% | 0.00 | — | — |")
+    lines.append("")
+    lines.append(f"**Portfolio beta {pf.port_beta:.2f}** (target {pf.target_beta:.2f}) · "
+                 f"alpha {pf.port_alpha_annual:+.1f}%/yr · appraisal {pf.port_appraisal:.2f}")
+    lines.append("")
+    lines.append("### 🛡️ Stress Test — Win When the Market Is Down")
+    lines.append("")
+    lines.append(f"- **Downside capture:** {s.downside_capture:.2f}  ·  **Upside capture:** {s.upside_capture:.2f}  ·  **Capture ratio:** {s.capture_ratio:.2f}")
+    lines.append(f"- **Win rate in down months:** {s.win_rate_down_months:.0f}%")
+    lines.append(f"- **Max drawdown:** portfolio {s.port_max_drawdown:.1f}% vs SPY {s.spy_max_drawdown:.1f}%")
+    lines.append(f"- **Annual return:** portfolio {s.port_ann_return:.1f}% vs SPY {s.spy_ann_return:.1f}%  ·  **Sharpe:** {s.port_sharpe:.2f} vs {s.spy_sharpe:.2f}")
+    for label, d in s.stress_windows.items():
+        lines.append(f"- **{label}:** portfolio {d['port']:+.1f}% vs SPY {d['spy']:+.1f}%")
+    lines.append("")
+    lines.append(commentary)
+    return "\n".join(lines)
 
 
 def run_ai_infra():
@@ -252,16 +295,21 @@ def run_tech_radar():
     ai_infra_analysis = run_ai_infra()
     console.print()
 
-    # ── 1. Whale Tracker (has its own pager) ──────────────────────────────────
-    console.print(Rule(f"[bold yellow]🐋 Part 1: Smart Money / Whale Tracker[/bold yellow]"))
+    # ── 1. Defensive Alpha — Portfolio Construction ───────────────────────────
+    console.print(Rule(f"[bold green]🛡️  Part 1: Defensive Alpha — Portfolio Construction[/bold green]"))
+    _portfolio_result, portfolio_report_md = run_portfolio()
+    console.print()
+
+    # ── 2. Whale Tracker (has its own pager) ──────────────────────────────────
+    console.print(Rule(f"[bold yellow]🐋 Part 2: Smart Money / Whale Tracker[/bold yellow]"))
     run_whale_tracker()
     console.print()
 
-    # ── 2. Stocks (has its own pager) ─────────────────────────────────────────
+    # ── 3. Stocks (has its own pager) ─────────────────────────────────────────
     sector_results, etf_stocks, gems, stock_analysis, headline_analysis = run_stocks(briefing_mode=False)
     console.print()
 
-    # ── 3. Tech Briefing ──────────────────────────────────────────────────────
+    # ── 4. Tech Briefing ──────────────────────────────────────────────────────
     console.print(Rule("[bold cyan]🔭 Tech Radar Briefing[/bold cyan]"))
 
     console.print("[bold]Fetching tech data sources...[/bold]")
@@ -295,6 +343,8 @@ def run_tech_radar():
         f.write(f"# Frontier Tech Radar — {TODAY}\n\n")
         f.write("## AI Infrastructure Value Chain\n\n")
         f.write(ai_infra_analysis + "\n\n---\n\n")
+        f.write("## Defensive Alpha — Portfolio Construction\n\n")
+        f.write(portfolio_report_md + "\n\n---\n\n")
         f.write("## Market Intelligence Report\n\n")
         f.write(stock_analysis + "\n\n---\n\n")
         f.write("## Tech Briefing\n\n")

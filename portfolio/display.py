@@ -143,6 +143,33 @@ def render_stress_panel(result: PortfolioResult) -> Panel:
                  border_style="green", padding=(1, 2))
 
 
+def build_portfolio_context(result: PortfolioResult) -> str:
+    """Compact text summary of the portfolio + stress results for the LLM (low-token)."""
+    pf, s = result.portfolio, result.stress
+    lines = ["=== CONSTRUCTED DEFENSIVE PORTFOLIO ==="]
+    lines.append(
+        f"Whole-portfolio: Dimson beta {pf.port_beta} (target {pf.target_beta}), "
+        f"downside beta {pf.port_downside_beta}, upside beta {pf.port_upside_beta}, "
+        f"alpha {pf.port_alpha_annual:+.1f}%/yr, appraisal {pf.port_appraisal}."
+    )
+    lines.append("Sleeve weights: " + ", ".join(f"{k} {v*100:.0f}%" for k, v in pf.sleeve_weights.items()))
+    lines.append("\nHoldings (weight | sleeve | beta | alpha%/yr | appraisal):")
+    for h in result.portfolio.holdings:
+        p = h.profile
+        lines.append(f"  {p.ticker} {p.name}: {h.weight*100:.1f}% | {p.sleeve} | "
+                     f"beta {p.beta_lagged} | alpha {p.alpha_annual:+.1f}% | appraisal {p.appraisal_ratio}")
+    lines.append("\n=== STRESS TEST (5y) ===")
+    lines.append(f"Downside capture {s.downside_capture} (share of SPY DOWN days — lower better), "
+                 f"upside capture {s.upside_capture}, capture ratio {s.capture_ratio}.")
+    lines.append(f"Win rate in down months: {s.win_rate_down_months}%.")
+    lines.append(f"Max drawdown: portfolio {s.port_max_drawdown}% vs SPY {s.spy_max_drawdown}%.")
+    lines.append(f"Annual return: portfolio {s.port_ann_return}% vs SPY {s.spy_ann_return}%. "
+                 f"Sharpe: {s.port_sharpe} vs {s.spy_sharpe}.")
+    for label, d in s.stress_windows.items():
+        lines.append(f"{label}: portfolio {d['port']:+.1f}% vs SPY {d['spy']:+.1f}%.")
+    return "\n".join(lines)
+
+
 def render_education_panel() -> Panel:
     """A short primer so the terminal teaches the concepts as it runs."""
     txt = """[bold]How to read this — beta-adjusted alpha & convexity[/bold]
