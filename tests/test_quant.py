@@ -231,3 +231,34 @@ class TestQMJQuality:
             return_1m=0.0, return_6m=0.0, return_1y=0.0, upside_to_target=None)
         f = _compute_fundamental(sd)
         assert 0 <= f.quality_score <= 10
+
+
+class TestSignalQualityFixes:
+    def _sd(self, **over):
+        base = dict(
+            ticker="TEST", pe_ratio=20.0, pb_ratio=3.0, ps_ratio=5.0, forward_pe=18.0,
+            revenue_growth=30.0, earnings_growth=20.0, profit_margin=18.0,
+            return_1m=2.0, return_6m=10.0, return_1y=25.0, upside_to_target=12.0,
+            return_on_equity=22.0, debt_to_equity=0.4, market_cap_b=50.0,
+            is_etf=False, gem_category=None)
+        base.update(over)
+        return SimpleNamespace(**base)
+
+    def test_microcap_extreme_growth_discounted(self):
+        # +9000% rev growth on a $0.3B cap should score LOWER on growth than a
+        # healthy +40% grower at a normal cap (noise guard).
+        noisy = _compute_fundamental(self._sd(revenue_growth=9000.0, market_cap_b=0.3))
+        real  = _compute_fundamental(self._sd(revenue_growth=40.0, market_cap_b=50.0))
+        assert noisy.growth_score < real.growth_score
+
+    def test_large_cap_extreme_growth_not_penalized(self):
+        # Same +9000% but at a large cap is not treated as micro-cap noise.
+        big = _compute_fundamental(self._sd(revenue_growth=9000.0, market_cap_b=50.0))
+        assert big.growth_score >= 7.0
+
+    def test_trending_growth_name_not_strong_sell(self, trending_prices, ohlcv_df):
+        # A strong uptrending high-grower must not be tagged SELL/STRONG_SELL
+        # purely because mean-reversion reads it as 'overbought'.
+        sd = self._sd(revenue_growth=120.0, return_1y=95.0, market_cap_b=8.0)
+        report = build_quant_report(sd, trending_prices, ohlcv_df)
+        assert report.signal_type not in ("SELL", "STRONG_SELL")

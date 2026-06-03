@@ -293,6 +293,15 @@ def _compute_statistical(closes: pd.Series) -> StatisticalScore:
                 50  if hurst.interpretation=="RANDOM" else 35) * 0.15  # mean-rev favored for oversold
     mr_c     = float((mr.signal_strength + 1) / 2 * 100) * 0.25
 
+    # Regime gate (fixes "the model shorts the winners"): the statistical score
+    # is a mean-reversion / oversold scanner, so a strong UPTREND reads as
+    # "overbought" and drags the score toward SELL — exactly wrong for momentum
+    # names like BEAM / RXRX. When Hurst says the regime is TRENDING, momentum
+    # persists, so don't let the overbought mean-reversion term punish it: floor
+    # the MR contribution at neutral.
+    if hurst.interpretation == "TRENDING":
+        mr_c = max(mr_c, 50 * 0.25)
+
     composite = round(markov_c + kalman_c + hurst_c + mr_c, 1)
 
     if   composite >= 72: sig = "STRONG_BUY"
@@ -317,9 +326,19 @@ def _compute_fundamental(sd) -> FundamentalScore:
         if ps:  s += 1 if ps<5 else -0.5 if ps>20 else 0
         return round(float(np.clip(s,0,10)),2)
 
-    def grw_s(rev, earn):
+    def _noisy_microcap_growth(rev, mcap):
+        """A +200%+ YoY revenue print off a sub-$1B base is usually noise from a
+        tiny denominator (e.g. $0.1M → $10M = +9900%), not durable growth. Flag
+        it so we give partial — not maximal — growth credit."""
+        return rev is not None and rev > 200 and mcap is not None and mcap < 1.0
+
+    def grw_s(rev, earn, mcap=None):
         s = 5.0
-        if rev:  s += 3 if rev>50 else 2 if rev>25 else 1 if rev>10 else -2 if rev<0 else 0
+        if rev is not None:
+            if _noisy_microcap_growth(rev, mcap):
+                s += 1.0   # extreme growth off a micro base — discount it
+            else:
+                s += 3 if rev>50 else 2 if rev>25 else 1 if rev>10 else -2 if rev<0 else 0
         if earn: s += 2 if earn>50 else 1 if earn>20 else -1 if earn<0 else 0
         return round(float(np.clip(s,0,10)),2)
 
@@ -346,11 +365,15 @@ def _compute_fundamental(sd) -> FundamentalScore:
         prof = round(float(np.clip(prof, 0, 10)), 2)
 
         # ── Growth — is the quality rising? ──
+        mcap = getattr(sd, "market_cap_b", None)
         grow = 5.0
         if earn is not None:
             grow += 2.5 if earn > 25 else 1.5 if earn > 10 else 0 if earn >= 0 else -2.5
         if rev is not None:
-            grow += 2.5 if rev > 25 else 1.5 if rev > 10 else 0 if rev >= 0 else -2.0
+            if _noisy_microcap_growth(rev, mcap):
+                grow += 0.5   # micro-cap extreme-growth noise — minimal credit
+            else:
+                grow += 2.5 if rev > 25 else 1.5 if rev > 10 else 0 if rev >= 0 else -2.0
         grow = round(float(np.clip(grow, 0, 10)), 2)
 
         # ── Safety — low leverage, profitable, analyst support ──
@@ -373,7 +396,7 @@ def _compute_fundamental(sd) -> FundamentalScore:
         return round(float(np.clip(s,0,10)),2)
 
     v = val_s(sd.pe_ratio, sd.pb_ratio, sd.ps_ratio)
-    g = grw_s(sd.revenue_growth, sd.earnings_growth)
+    g = grw_s(sd.revenue_growth, sd.earnings_growth, getattr(sd, "market_cap_b", None))
     q, q_prof, q_grow, q_safe = qmj_quality(sd)
     m = mom_s(sd.return_1m, sd.return_6m, sd.return_1y)
     composite = round(0.25*v + 0.30*g + 0.25*q + 0.20*m, 2)
@@ -455,6 +478,17 @@ def build_quant_report(sd, closes: pd.Series, hist_df: pd.DataFrame = None) -> Q
         overall = t*0.20 + s*0.25 + m*0.15 + r*0.15 + f*0.25
 
     overall = round(overall, 1)
+
+    # Momentum-quality guard (fixes "the model shorts the winners"): a strong,
+    # high-quality uptrend should not be tagged SELL just because mean-reversion
+    # reads it as overbought. If a real grower is in a confirmed uptrend, floor
+    # the score at HOLD so momentum names like BEAM / RXRX aren't flagged SELL.
+    strong_growth = (getattr(sd, "revenue_growth", 0) or 0) > 25
+    strong_uptrend = (ml.trend_signal in ("STRONG_UP", "UP")
+                      and stat.hurst.interpretation != "MEAN_REVERTING"
+                      and (getattr(sd, "return_1y", 0) or 0) > 0)
+    if strong_growth and strong_uptrend and not is_etf:
+        overall = max(overall, 50.0)
 
     if   overall >= 72: sig = "STRONG_BUY"
     elif overall >= 58: sig = "BUY"
