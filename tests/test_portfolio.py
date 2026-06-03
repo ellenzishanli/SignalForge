@@ -110,6 +110,52 @@ class TestMultiFactor:
         assert p.r_squared_mf is None
 
 
+class TestMFConstruction:
+    def _profiles(self, use_mf=True):
+        from portfolio.construction import _effective_appraisals
+        return _effective_appraisals
+
+    def test_shrinkage_compresses_toward_mean(self):
+        from portfolio.construction import _effective_appraisals
+        # Three names with very different CAPM appraisals, no MF available.
+        profs = []
+        for tk, ar in [("A", 2.0), ("B", 0.0), ("C", 1.0)]:
+            stk, mkt = _make_series(beta=1.0, alpha_daily=0.0, noise=0.004, seed=hash(tk) % 100)
+            p = compute_factor_profile(tk, tk, "alpha", stk, mkt)
+            p.appraisal_ratio = ar          # override for a controlled test
+            p.appraisal_mf = None
+            profs.append(p)
+        full = _effective_appraisals(profs, use_mf_alpha=True, shrinkage=0.0)
+        half = _effective_appraisals(profs, use_mf_alpha=True, shrinkage=0.5)
+        # Shrinkage pulls the extreme (A=2.0, mean=1.0) toward the mean.
+        assert full["A"] == 2.0
+        assert abs(half["A"] - 1.5) < 1e-9      # 1.0 + 0.5*(2.0-1.0)
+
+    def test_prefers_mf_appraisal_when_present(self):
+        from portfolio.construction import _effective_appraisals
+        stk, mkt = _make_series(beta=1.0, alpha_daily=0.0, noise=0.004, seed=7)
+        p = compute_factor_profile("X", "X", "alpha", stk, mkt)
+        p.appraisal_ratio = 0.2
+        p.appraisal_mf = 1.5
+        out = _effective_appraisals([p], use_mf_alpha=True, shrinkage=0.0)
+        assert out["X"] == 1.5                    # uses MF, not CAPM
+        out2 = _effective_appraisals([p], use_mf_alpha=False, shrinkage=0.0)
+        assert out2["X"] == 0.2                   # falls back to CAPM when disabled
+
+    def test_construction_runs_with_mf_fields(self):
+        profs = []
+        specs = [("HIA", "alpha", 1.4, 0.0005), ("MID", "alpha", 1.0, 0.0003),
+                 ("LOW", "defensive", 0.4, 0.0002), ("HDG", "convexity", -0.5, 0.0)]
+        for tk, slv, beta, a in specs:
+            stk, mkt = _make_series(beta=beta, alpha_daily=a, noise=0.004, seed=hash(tk) % 50)
+            p = compute_factor_profile(tk, tk, slv, stk, mkt)
+            p.appraisal_mf = p.appraisal_ratio    # simulate MF available
+            p.idio_vol_mf_annual = p.idio_vol_annual
+            profs.append(p)
+        port = construct_defensive_portfolio(profs, target_beta=0.6, use_mf_alpha=True)
+        assert abs(sum(h.weight for h in port.holdings) + port.cash_weight - 1.0) < 0.02
+
+
 class TestConstruction:
     def _profiles(self):
         """Three alpha names (varying beta/appraisal) + one negative-beta convex hedge."""

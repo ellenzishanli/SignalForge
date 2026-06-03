@@ -59,6 +59,8 @@ class FactorProfile:
     beta_value: Optional[float] = None         # HML loading (+ = value, − = growth)
     beta_mom: Optional[float] = None           # MOM loading
     beta_qual: Optional[float] = None          # QMJ loading
+    idio_vol_mf_annual: Optional[float] = None # residual vol after ALL factors, %/yr
+    appraisal_mf: Optional[float] = None       # MF alpha / MF residual vol (honest appraisal)
 
 
 def _ols(y: np.ndarray, X: np.ndarray):
@@ -174,14 +176,19 @@ def _multifactor_fit(rs: pd.Series, factors: pd.DataFrame, rf_daily: float) -> O
     coefs, resid = _ols(y, X)
     r2 = 1.0 - np.var(resid) / np.var(y) if np.var(y) > 0 else 0.0
     loadings = dict(zip(cols, coefs[1:]))
+    alpha_mf_annual = float(coefs[0]) * TRADING_DAYS * 100
+    idio_vol_mf_annual = float(np.std(resid, ddof=len(cols) + 1)) * np.sqrt(TRADING_DAYS) * 100
+    appraisal_mf = (alpha_mf_annual / idio_vol_mf_annual) if idio_vol_mf_annual > 1e-9 else 0.0
     out = {
-        "alpha_mf_annual": round(float(coefs[0]) * TRADING_DAYS * 100, 2),
+        "alpha_mf_annual": round(alpha_mf_annual, 2),
         "r_squared_mf": round(float(r2), 3),
         "beta_mkt_mf": round(float(loadings.get("mkt", float("nan"))), 3),
         "beta_size": round(float(loadings.get("smb", float("nan"))), 3),
         "beta_value": round(float(loadings.get("hml", float("nan"))), 3),
         "beta_mom": round(float(loadings.get("mom", float("nan"))), 3),
         "beta_qual": round(float(loadings.get("qmj", float("nan"))), 3),
+        "idio_vol_mf_annual": round(idio_vol_mf_annual, 1),
+        "appraisal_mf": round(appraisal_mf, 3),
     }
     return out
 

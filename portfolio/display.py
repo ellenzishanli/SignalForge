@@ -75,26 +75,29 @@ def render_portfolio_table(result: PortfolioResult) -> Table:
     t.add_column("Weight", justify="right", width=8)
     t.add_column("Beta", justify="right", width=7)
     t.add_column("Alpha%/yr", justify="right", width=10)
-    t.add_column("Appraisal", justify="right", width=10)
+    t.add_column("Appraisal*", justify="right", width=11)
     t.add_column("Weight bar", width=24)
 
     for h in result.portfolio.holdings:
         p = h.profile
         slv_c = _SLEEVE_STYLE.get(p.sleeve, "white")
         bar = "█" * max(1, round(h.weight * 80))
+        # Show the appraisal the book actually weighs by: multi-factor if present.
+        appr = p.appraisal_mf if p.appraisal_mf is not None else p.appraisal_ratio
         t.add_row(
             p.ticker, p.name[:24],
             f"[{slv_c}]{_SLEEVE_LABEL.get(p.sleeve, p.sleeve)}[/{slv_c}]",
             f"[bold]{h.weight*100:.1f}%[/bold]",
             f"{p.beta_lagged:.2f}",
             _c(p.alpha_annual, hi=0, lo=0, fmt="{:+.1f}"),
-            _c(p.appraisal_ratio, hi=0.3, lo=0, fmt="{:+.2f}"),
+            _c(appr, hi=0.3, lo=0, fmt="{:+.2f}"),
             f"[{slv_c}]{bar}[/{slv_c}]",
         )
     if pf.cash_weight > 0.005:
         t.add_row("CASH", "Cash / dry powder", "[dim]CASH[/dim]",
                   f"[bold]{pf.cash_weight*100:.1f}%[/bold]", "0.00", "—", "—",
                   "[dim]" + "█" * max(1, round(pf.cash_weight * 80)) + "[/dim]")
+    t.caption = "[dim]* Appraisal = multi-factor alpha ÷ residual vol when available (else CAPM), shrunk toward the mean.[/dim]"
     return t
 
 

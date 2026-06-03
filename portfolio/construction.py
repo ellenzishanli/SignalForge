@@ -48,18 +48,29 @@ def construct_defensive_portfolio(
     low_beta_tilt: float = 1.0,
     max_weight: float = 0.12,
     min_appraisal: float = 0.0,
+    use_mf_alpha: bool = True,
+    alpha_shrinkage: float = 0.5,
 ) -> Portfolio:
     """
     Build the portfolio. ``low_beta_tilt`` controls how hard we lean toward low
     beta (0 = pure appraisal-ratio weighting; 1 = divide weight by beta).
+
+    ``use_mf_alpha`` ranks by the *multi-factor* appraisal (alpha after stripping
+    market/size/value/momentum/quality) when available — a far more honest alpha
+    than the single-SPY CAPM one (whose R² can be ~2%). ``alpha_shrinkage`` then
+    pulls every name's appraisal toward the cross-sectional mean (0 = trust the
+    raw estimate, 1 = ignore it entirely), because individual-stock alpha
+    mean-reverts and the highest in-sample alphas are the least repeatable.
     """
     # ── 1. Risk sleeve (alpha + defensive): weight ∝ appraisal / beta^tilt ───
     risk_names = [p for p in profiles if p.sleeve in ("alpha", "defensive")]
     convex_names = [p for p in profiles if p.sleeve == "convexity"]
 
+    eff_appraisal = _effective_appraisals(risk_names, use_mf_alpha, alpha_shrinkage)
+
     scored = []
     for p in risk_names:
-        ar = max(p.appraisal_ratio - min_appraisal, 0.0)
+        ar = max(eff_appraisal.get(p.ticker, 0.0) - min_appraisal, 0.0)
         if ar <= 0:
             continue
         beta_floor = max(p.beta, 0.15)  # avoid divide-by-tiny for near-zero beta
@@ -148,6 +159,24 @@ def _solve_sleeves(risk_beta, convex_beta, target_beta):
         w_convex *= scale
         cash = 1.0 - w_risk - w_convex
     return w_risk, w_convex, max(0.0, cash)
+
+
+def _effective_appraisals(risk_names, use_mf_alpha: bool, shrinkage: float) -> Dict[str, float]:
+    """
+    Per-name appraisal used for weighting. Prefer the multi-factor appraisal
+    (honest alpha) when present, fall back to the CAPM appraisal, then shrink
+    every value toward the cross-sectional mean to temper alpha mean-reversion.
+        shrunk = mean + (1 − λ)·(raw − mean)
+    """
+    raw = {}
+    for p in risk_names:
+        a = p.appraisal_mf if (use_mf_alpha and p.appraisal_mf is not None) else p.appraisal_ratio
+        raw[p.ticker] = float(a) if a is not None else 0.0
+    if not raw:
+        return raw
+    lam = float(np.clip(shrinkage, 0.0, 1.0))
+    mu = float(np.mean(list(raw.values())))
+    return {t: mu + (1.0 - lam) * (v - mu) for t, v in raw.items()}
 
 
 def _cap_and_renorm(weights: Dict[str, float], cap: float) -> Dict[str, float]:
