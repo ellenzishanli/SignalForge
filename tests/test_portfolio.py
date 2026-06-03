@@ -15,6 +15,9 @@ from portfolio.construction import construct_defensive_portfolio
 from portfolio.risk_parity import (
     solve_risk_parity, risk_contributions, build_risk_parity_portfolio,
 )
+from portfolio.max_sharpe import (
+    solve_max_sharpe, build_max_sharpe_portfolio, expected_return,
+)
 
 
 def _make_series(n=600, seed=0, beta=1.0, alpha_daily=0.0, noise=0.01):
@@ -198,3 +201,41 @@ class TestRiskParity:
         w = {h.profile.ticker: h.weight for h in port.holdings}
         # The lowest-vol name should out-weight the highest-vol name.
         assert w.get("LOVOL", 0) > w.get("HIVOL", 0)
+
+
+class TestMaxSharpe:
+    def test_solver_long_only_sums_to_one(self):
+        mu = np.array([0.12, 0.08, 0.05])
+        cov = np.diag([0.04, 0.02, 0.01])
+        w = solve_max_sharpe(mu, cov, rf=0.04, max_weight=1.0)
+        assert abs(w.sum() - 1.0) < 1e-6
+        assert (w >= -1e-9).all()
+
+    def test_higher_sharpe_than_equal_weight(self):
+        rng = np.random.default_rng(3)
+        mu = np.array([0.15, 0.10, 0.06])
+        # Build a PSD covariance.
+        A = rng.normal(0, 1, (3, 3))
+        cov = A @ A.T / 50 + np.diag([0.02, 0.02, 0.02])
+        rf = 0.04
+        w = solve_max_sharpe(mu, cov, rf=rf, max_weight=1.0)
+        eq = np.full(3, 1 / 3)
+        def sharpe(w):
+            return (w @ mu - rf) / np.sqrt(w @ cov @ w)
+        assert sharpe(w) >= sharpe(eq) - 1e-9
+
+    def test_zero_weight_to_negative_carry(self):
+        # A name with expected return below rf and high vol should get ~no weight.
+        mu = np.array([0.14, 0.10, 0.00])   # asset 2 = TLT-like negative carry
+        cov = np.diag([0.04, 0.03, 0.05])
+        w = solve_max_sharpe(mu, cov, rf=0.04, max_weight=1.0)
+        assert w[2] < 0.02
+
+    def test_build_portfolio(self):
+        # Reuse the risk-parity synthetic profiles+prices.
+        rp = TestRiskParity()
+        profs, prices = rp._profiles_and_prices()
+        port = build_max_sharpe_portfolio(profs, prices, max_weight=0.6)
+        total = sum(h.weight for h in port.holdings) + port.cash_weight
+        assert abs(total - 1.0) < 0.02
+        assert all(h.weight >= 0 for h in port.holdings)

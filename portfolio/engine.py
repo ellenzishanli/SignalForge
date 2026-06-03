@@ -12,6 +12,7 @@ from portfolio.factor_model import compute_factor_profile, FactorProfile
 from portfolio.factors import build_factor_returns, factor_proxy_tickers
 from portfolio.construction import construct_defensive_portfolio, Portfolio
 from portfolio.risk_parity import build_risk_parity_portfolio
+from portfolio.max_sharpe import build_max_sharpe_portfolio
 from portfolio.stress import stress_test, StressReport
 
 
@@ -25,6 +26,9 @@ class PortfolioResult:
     # callers and tests keep working.
     rp_portfolio: Optional[Portfolio] = None
     rp_stress: Optional[StressReport] = None
+    # Return-seeking maximum-Sharpe (tangency) book + its stress test.
+    ms_portfolio: Optional[Portfolio] = None
+    ms_stress: Optional[StressReport] = None
 
 
 def _sleeve_lookup(universe: Dict) -> Dict[str, tuple]:
@@ -41,6 +45,7 @@ def run_portfolio_engine(
     period: str = "5y",
     target_beta: float = 0.60,
     include_risk_parity: bool = True,
+    include_max_sharpe: bool = True,
     progress=None,
 ) -> PortfolioResult:
     universe = universe or PORTFOLIO_UNIVERSE
@@ -70,7 +75,13 @@ def run_portfolio_engine(
         rp_portfolio = build_risk_parity_portfolio(profiles, prices)
         rp_stress = stress_test(rp_portfolio, prices, market)
 
+    ms_portfolio = ms_stress = None
+    if include_max_sharpe:
+        ms_portfolio = build_max_sharpe_portfolio(profiles, prices)
+        ms_stress = stress_test(ms_portfolio, prices, market)
+
     return PortfolioResult(
         profiles=profiles, portfolio=portfolio, stress=stress,
         rp_portfolio=rp_portfolio, rp_stress=rp_stress,
+        ms_portfolio=ms_portfolio, ms_stress=ms_stress,
     )

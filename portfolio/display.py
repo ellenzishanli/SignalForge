@@ -139,39 +139,79 @@ def render_risk_parity_table(result: PortfolioResult) -> Table:
 
 
 def render_method_comparison_panel(result: PortfolioResult) -> Panel:
-    """Defensive Alpha vs Risk Parity, head to head, on the 5y stress numbers."""
-    da, rp = result.stress, result.rp_stress
-    dap, rpp = result.portfolio, result.rp_portfolio
+    """Defensive Alpha vs Risk Parity vs Max-Sharpe, head to head (5y stress)."""
+    # Assemble the methods that are available.
+    methods = [("🛡️ Defensive Alpha", result.stress, result.portfolio)]
+    if result.rp_stress is not None:
+        methods.append(("⚖️ Risk Parity", result.rp_stress, result.rp_portfolio))
+    if result.ms_stress is not None:
+        methods.append(("🚀 Max-Sharpe", result.ms_stress, result.ms_portfolio))
 
-    def row(label, da_v, rp_v, fmt="{:.2f}", good_high=True, suffix=""):
-        def col(v):
-            if v != v:
-                return "[dim]—[/dim]"
-            return fmt.format(v) + suffix
-        # Highlight whichever method is better on this metric.
-        a, b = da_v, rp_v
-        a_better = (a > b) if good_high else (a < b)
-        a_s = f"[bold green]{col(a)}[/bold green]" if a == a and b == b and a_better else col(a)
-        b_s = f"[bold green]{col(b)}[/bold green]" if a == a and b == b and not a_better else col(b)
-        return f"  {label:<26} {a_s:>22}   {b_s:>22}"
+    metrics = [
+        ("Annual return",    lambda s, p: s.port_ann_return,   "{:+.1f}", True,  "%"),
+        ("Annual vol",       lambda s, p: s.port_ann_vol,      "{:.1f}",  False, "%"),
+        ("Sharpe ratio",     lambda s, p: s.port_sharpe,       "{:.2f}",  True,  ""),
+        ("Max drawdown",     lambda s, p: s.port_max_drawdown, "{:+.1f}", True,  "%"),
+        ("Downside capture", lambda s, p: s.downside_capture,  "{:.2f}",  False, ""),
+        ("Capture ratio",    lambda s, p: s.capture_ratio,     "{:.2f}",  True,  ""),
+        ("Portfolio beta",   lambda s, p: p.port_beta,         "{:.2f}",  False, ""),
+    ]
 
-    lines = []
-    lines.append(f"  [bold]{'Metric':<26} {'🛡️  Defensive Alpha':>16}   {'⚖️  Risk Parity':>16}[/bold]")
-    lines.append("  " + "─" * 64)
-    lines.append(row("Annual return", da.port_ann_return, rp.port_ann_return, "{:+.1f}", True, "%"))
-    lines.append(row("Annual vol", da.port_ann_vol, rp.port_ann_vol, "{:.1f}", False, "%"))
-    lines.append(row("Sharpe ratio", da.port_sharpe, rp.port_sharpe, "{:.2f}", True))
-    lines.append(row("Max drawdown", da.port_max_drawdown, rp.port_max_drawdown, "{:+.1f}", True, "%"))
-    lines.append(row("Downside capture", da.downside_capture, rp.downside_capture, "{:.2f}", False))
-    lines.append(row("Capture ratio", da.capture_ratio, rp.capture_ratio, "{:.2f}", True))
-    lines.append(row("Portfolio beta", dap.port_beta, rpp.port_beta, "{:.2f}", False))
+    header = f"  [bold]{'Metric':<18}" + "".join(f"{m[0]:>20}" for m in methods) + "[/bold]"
+    lines = [header, "  " + "─" * (18 + 20 * len(methods))]
+    for label, getter, fmt, good_high, suffix in metrics:
+        vals = [getter(s, p) for _, s, p in methods]
+        valid = [v for v in vals if v == v]
+        best = (max(valid) if good_high else min(valid)) if valid else None
+        cells = ""
+        for v in vals:
+            txt = (fmt.format(v) + suffix) if v == v else "—"
+            if best is not None and v == best:
+                txt = f"[bold green]{txt}[/bold green]"
+            cells += f"{txt:>20}"
+        lines.append(f"  {label:<18}{cells}")
     lines.append("")
-    lines.append("[dim]Both books are built from the SAME universe. Defensive Alpha sizes by "
-                 "beta-adjusted alpha (AQR); Risk Parity sizes purely so every name contributes "
-                 "equal risk (Bridgewater All Weather). Green = better on that metric.[/dim]")
+    lines.append("[dim]Same universe, three sizing rules. Defensive Alpha → beta-adjusted alpha "
+                 "(AQR). Risk Parity → equal risk contribution (Bridgewater). Max-Sharpe → highest "
+                 "risk-adjusted return (tangency, alpha haircut 50%). Green = best on that metric.[/dim]")
     return Panel("\n".join(lines),
-                 title="[bold]🆚 Two Methodologies — Defensive Alpha vs Risk Parity (5y)[/bold]",
+                 title="[bold]🆚 Three Methodologies — Defensive Alpha vs Risk Parity vs Max-Sharpe (5y)[/bold]",
                  border_style="magenta", padding=(1, 2))
+
+
+def render_max_sharpe_table(result: PortfolioResult) -> Table:
+    """The return-seeking maximum-Sharpe (tangency) book."""
+    from portfolio.max_sharpe import expected_return
+    ms = result.ms_portfolio
+    t = Table(
+        title=f"🚀 Maximum-Sharpe (Tangency) — return-seeking — achieved β {ms.port_beta:.2f}",
+        box=box.ROUNDED, show_lines=False, header_style="bold white on dark_red",
+        min_width=150,
+    )
+    t.add_column("Ticker", style="bold", width=7, no_wrap=True)
+    t.add_column("Name", width=24, no_wrap=True)
+    t.add_column("Sleeve", width=8)
+    t.add_column("Weight", justify="right", width=8)
+    t.add_column("E[Return]", justify="right", width=10)
+    t.add_column("Beta", justify="right", width=7)
+    t.add_column("Weight bar", width=24)
+    for h in ms.holdings:
+        p = h.profile
+        slv_c = _SLEEVE_STYLE.get(p.sleeve, "white")
+        bar = "█" * max(1, round(h.weight * 80))
+        t.add_row(
+            p.ticker, p.name[:24],
+            f"[{slv_c}]{_SLEEVE_LABEL.get(p.sleeve, p.sleeve)}[/{slv_c}]",
+            f"[bold]{h.weight*100:.1f}%[/bold]",
+            f"{expected_return(p)*100:+.1f}%",
+            f"{p.beta_lagged:.2f}",
+            f"[{slv_c}]{bar}[/{slv_c}]",
+        )
+    if ms.cash_weight > 0.005:
+        t.add_row("CASH", "Cash / dry powder", "[dim]CASH[/dim]",
+                  f"[bold]{ms.cash_weight*100:.1f}%[/bold]", "—", "0.00",
+                  "[dim]" + "█" * max(1, round(ms.cash_weight * 80)) + "[/dim]")
+    return t
 
 
 def render_stress_panel(result: PortfolioResult) -> Panel:

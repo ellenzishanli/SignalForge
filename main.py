@@ -40,7 +40,7 @@ from portfolio.engine import run_portfolio_engine
 from portfolio.display import (
     render_factor_table, render_portfolio_table,
     render_stress_panel, render_education_panel, build_portfolio_context,
-    render_risk_parity_table, render_method_comparison_panel,
+    render_risk_parity_table, render_method_comparison_panel, render_max_sharpe_table,
 )
 from analysis.ai_analyst import summarize_daily_data, analyze_full_market, analyze_ai_infrastructure, analyze_portfolio
 from analysis.llm_client import get_provider
@@ -127,6 +127,10 @@ def run_portfolio(target_beta: float = 0.60):
         if result.rp_portfolio is not None:
             display.print(render_risk_parity_table(result))
             display.print()
+        if result.ms_portfolio is not None:
+            display.print(render_max_sharpe_table(result))
+            display.print()
+        if result.rp_portfolio is not None or result.ms_portfolio is not None:
             display.print(render_method_comparison_panel(result))
             display.print()
         display.print(Panel(
@@ -170,19 +174,27 @@ def _portfolio_report_md(result, commentary: str) -> str:
         lines.append(f"- **{label}:** portfolio {d['port']:+.1f}% vs SPY {d['spy']:+.1f}%")
     lines.append("")
 
-    # ── Risk Parity comparison (Bridgewater All Weather) ──────────────────────
-    if result.rp_portfolio is not None and result.rp_stress is not None:
-        rp, rs = result.rp_portfolio, result.rp_stress
-        lines.append("### ⚖️ Risk Parity vs Defensive Alpha — Same Universe, Two Methods")
+    # ── Method comparison: Defensive Alpha vs Risk Parity vs Max-Sharpe ───────
+    if result.rp_stress is not None or result.ms_stress is not None:
+        cols = [("🛡️ Defensive Alpha", s, pf)]
+        if result.rp_stress is not None:
+            cols.append(("⚖️ Risk Parity", result.rp_stress, result.rp_portfolio))
+        if result.ms_stress is not None:
+            cols.append(("🚀 Max-Sharpe", result.ms_stress, result.ms_portfolio))
+        lines.append("### 🆚 Construction Methods — Same Universe, Different Sizing Rules")
         lines.append("")
-        lines.append("| Metric | 🛡️ Defensive Alpha | ⚖️ Risk Parity |")
-        lines.append("|--------|--------------------|----------------|")
-        lines.append(f"| Annual return | {s.port_ann_return:+.1f}% | {rs.port_ann_return:+.1f}% |")
-        lines.append(f"| Annual vol | {s.port_ann_vol:.1f}% | {rs.port_ann_vol:.1f}% |")
-        lines.append(f"| Sharpe | {s.port_sharpe:.2f} | {rs.port_sharpe:.2f} |")
-        lines.append(f"| Max drawdown | {s.port_max_drawdown:.1f}% | {rs.port_max_drawdown:.1f}% |")
-        lines.append(f"| Downside capture | {s.downside_capture:.2f} | {rs.downside_capture:.2f} |")
-        lines.append(f"| Portfolio beta | {pf.port_beta:.2f} | {rp.port_beta:.2f} |")
+        lines.append("| Metric | " + " | ".join(c[0] for c in cols) + " |")
+        lines.append("|--------|" + "|".join("--------" for _ in cols) + "|")
+        rows = [
+            ("Annual return",    lambda st, p: f"{st.port_ann_return:+.1f}%"),
+            ("Annual vol",       lambda st, p: f"{st.port_ann_vol:.1f}%"),
+            ("Sharpe",           lambda st, p: f"{st.port_sharpe:.2f}"),
+            ("Max drawdown",     lambda st, p: f"{st.port_max_drawdown:.1f}%"),
+            ("Downside capture", lambda st, p: f"{st.downside_capture:.2f}"),
+            ("Portfolio beta",   lambda st, p: f"{p.port_beta:.2f}"),
+        ]
+        for label, fn in rows:
+            lines.append(f"| {label} | " + " | ".join(fn(st, p) for _, st, p in cols) + " |")
         lines.append("")
 
     lines.append(commentary)
