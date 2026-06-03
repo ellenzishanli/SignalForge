@@ -1,7 +1,7 @@
 # SignalForge 🔭
 
-> **Smart money tracker + quant research terminal.**
-> Follows 20+ top hedge funds via SEC filings. 5-factor quant engine (Kalman filter, Markov chains, Hurst exponent) scoring 150+ stocks across the full AI infrastructure value chain. Congressional & insider trade monitoring. Real-time macro shock alerts. Delivered to your inbox every morning at 7 AM.
+> **Smart money tracker + quant research terminal + defensive portfolio engine.**
+> Follows 20+ top hedge funds via SEC filings. 5-factor quant engine (Kalman filter, Markov chains, Hurst exponent) scoring 150+ stocks across the full AI infrastructure value chain. Beta-adjusted alpha + downside-protected portfolio construction (AQR Total Portfolio Approach) — win when the market is down. Congressional & insider trade monitoring. Real-time macro shock alerts. Delivered to your inbox every morning at 7 AM.
 
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
@@ -308,17 +308,21 @@ GMAIL_APP_PASSWORD=your_16_char_app_password
 
 ## For VC / PE / Finance / Quant Careers
 
-This project demonstrates end-to-end financial engineering skills:
+### One-paragraph résumé blurb
+
+> **SignalForge** — Built an end-to-end quantitative investment research and portfolio construction platform in Python. Features: (1) **Defensive Alpha portfolio engine** implementing AQR's Total Portfolio Approach — beta-adjusted alpha via CAPM regression, Dimson/lagged beta, appraisal ratio (alpha ÷ idiosyncratic vol), betting-against-beta tilt, and a convexity sleeve (trend-following, anti-beta, gold, long bonds) sized to a target portfolio beta; backtested against SPY with downside-capture, upside-capture, win-rate-in-down-months, max drawdown, and 2022/2025 stress-window analysis. (2) **AI Infrastructure Value Chain** scanner scoring ~50 picks-and-shovels names (compute silicon, networking/optics, power, memory, neoclouds) with a custom Opportunity Score that surfaces fair-valued high-growth setups before market re-rating. (3) **Smart Money tracker** parsing SEC EDGAR 13F filings for 20+ hedge funds (Berkshire, Bridgewater, Renaissance, Tiger Global) with QoQ change detection, congressional trade monitoring (STOCK Act), and C-suite insider buying. (4) **5-factor quant engine** using Kalman filter, Markov chain regime detection, Hurst exponent, and multi-factor modeling (Value/Growth/Quality/Momentum) across 150+ stocks; walk-forward backtested with OLS factor weight optimization. Concurrent SEC pipeline with global rate limiting completes in <90 seconds, with LLM-generated bilingual (EN/中文) analysis and an automated daily HTML email report delivered at 7 AM PT.
+
+### Skill matrix
 
 | Skill | Implementation |
 |-------|---------------|
-| **Quantitative finance** | Kalman filter, Markov chains, Hurst exponent, Sharpe/Sortino/VaR, multi-factor models, GARP/PEG |
-| **Portfolio construction** | CAPM factor model, Jensen's alpha, appraisal ratio, Dimson/lagged beta, betting-against-beta, convexity & downside-capture, AQR Total Portfolio Approach |
-| **Data engineering** | Multi-source scraping: SEC EDGAR, Finviz, Yahoo Finance, StockTwits, Reddit, GitHub, RSS |
-| **Systems design** | Concurrent architecture, global rate limiting, modular CLI, automated scheduling |
-| **AI/LLM integration** | Multi-provider LLM client, bilingual sell-side research, macro event analysis |
-| **Financial analysis** | 13F parsing, QoQ change detection, congressional trade monitoring, insider signal tracking |
-| **Investment research** | Value-chain mapping, opportunity scoring, novelty ranking, sector rotation framework |
+| **Portfolio construction** | CAPM factor model, Jensen's alpha, appraisal ratio, Dimson/lagged beta, betting-against-beta, downside/upside capture, convexity, AQR Total Portfolio Approach |
+| **Quantitative finance** | Kalman filter, Markov chain regime detection, Hurst exponent, Sharpe/Sortino/VaR/CVaR, multi-factor models, GARP/PEG, walk-forward backtesting |
+| **Data engineering** | Multi-source ingestion: SEC EDGAR 13F, Finviz, Yahoo Finance, StockTwits, Reddit, GitHub, RSS, with concurrent thread-pool architecture and global rate limiting |
+| **Systems design** | Modular CLI (8 modes), thread-safe caches, automated cron scheduling, HTML email delivery, idempotent installers |
+| **AI/LLM integration** | Multi-provider client (Groq/Claude/Gemini/Ollama), bilingual sell-side research, macro event analysis, portfolio strategist commentary |
+| **Financial analysis** | 13F XML parsing, QoQ change detection, congressional trade monitoring, insider signal tracking, value-chain mapping |
+| **Investment research** | Opportunity scoring, novelty ranking, asymmetric setup detection, sector rotation, defensive sleeve construction |
 
 ---
 
