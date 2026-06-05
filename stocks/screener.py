@@ -16,7 +16,7 @@ import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.settings import AI_BASKET_STOCKS, AI_ETFS, STOCK_SCREEN, DASHBOARD_CORE
-from stocks.quant import build_quant_report, QuantReport, format_quant_one_liner
+from stocks.quant import build_quant_report, QuantReport, format_quant_one_liner, entry_badge
 
 console = Console()
 
@@ -379,6 +379,7 @@ def render_value_picks_table(value_picks: List[ValuePick]) -> Table:
     t.add_column("MA Signal", justify="center", width=10)
     t.add_column("Upside",    justify="right", width=8)
     t.add_column("Quant",     justify="right", width=7)
+    t.add_column("Entry",     justify="center", width=11)
     t.add_column("Thesis",    width=35)
 
     garp_colors = {"CHEAP": "bold green", "FAIR": "green", "EXPENSIVE": "yellow", "VERY_EXPENSIVE": "red", "N/A": "dim"}
@@ -399,6 +400,7 @@ def render_value_picks_table(value_picks: List[ValuePick]) -> Table:
             ma_sig,
             f"[green]+{s.upside_to_target:.0f}%[/green]" if s.upside_to_target and s.upside_to_target > 0 else "—",
             f"[bold]{vp.quant_score:.0f}[/bold]",
+            entry_badge(qr) if qr else "—",
             vp.value_thesis[:35],
         )
     return t

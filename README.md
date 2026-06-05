@@ -145,8 +145,9 @@ python3 main.py --mode whales
 |--------|-------------|
 | **Kalman Filter** | Tracks "true" fair value behind noisy price data |
 | **Markov Chain** | Models market regime (BULL/BEAR/SIDEWAYS) via transition probability matrix |
-| **Hurst Exponent** | Detects mean-reverting (H<0.5) vs trending (H>0.5) via R/S analysis |
+| **Hurst Exponent** | Detects mean-reverting (H<0.45) vs trending (H>0.55) via the structure-function (generalised Hurst) estimator — correctly centred at 0.5 for a random walk |
 | **MACD / Stochastic / ADX** | Momentum + trend strength signals |
+| **Bollinger Bands** | 20-day mid ± 2σ — `BB%` (0 = lower band, 1 = upper) flags over-extension |
 | **OBV** | On-Balance Volume — detects institutional accumulation |
 | **ATR + Fibonacci** | Volatility regime + key support/resistance levels |
 | **Sharpe / Sortino / VaR** | Risk-adjusted return + tail risk |
@@ -154,6 +155,21 @@ python3 main.py --mode whales
 | **QMJ Quality** | AQR "Quality Minus Junk" — Profitability · Growth · Safety pillars (margin, ROE, leverage) |
 | **GARP / PEG Ratio** | Growth At Reasonable Price scoring |
 | **Linear Regression ML** | Price slope, R², velocity, acceleration |
+
+#### ⏱️ Entry Quality — "Buy today or wait?"
+
+A separate **entry-timing overlay** that combines momentum **direction** (MACD), momentum **persistence** (Hurst), and **over-extension** (Bollinger %) into one call — *without* touching the long-term quant score. The key is the pairing: MACD-up **+** Hurst-trending is a *real* trend worth entering, while MACD-up **+** Hurst-mean-reverting is *fake* momentum that will snap back.
+
+| Rating | When | Meaning |
+|--------|------|---------|
+| 🟢 **BUY NOW** | MACD↑ + Hurst trending + not over-band | Real, persistent uptrend — buyable today |
+| 🟡 **WAIT DIP** | MACD↑ but through the upper band | Right idea, wrong price — limit-order a pullback |
+| 🔴 **AVOID** (fake) | MACD↑ + Hurst mean-reverting | Momentum will revert — don't chase |
+| 🔵 **PROBE** | MACD↓ + mean-reverting + oversold | Faded extreme — small mean-reversion probe only |
+| 🔴 **AVOID** (trend) | MACD↓ + Hurst trending | Real downtrend — don't catch the knife |
+| ⚪ **WAIT** | No clean directional edge | Wait for a clearer entry |
+
+Surfaced as `BB%` + `Entry` columns in the sector scan and screener tables, and in every stock's quant thesis.
 
 ### 🚨 Macro Shock Monitor
 

@@ -14,7 +14,7 @@ from rich import box
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from config.universe import SECTORS, AI_ETFS
-from stocks.quant import build_quant_report, QuantReport, format_quant_one_liner
+from stocks.quant import build_quant_report, QuantReport, format_quant_one_liner, entry_badge
 from stocks.parallel import parallel_fetch
 
 console = Console(width=280)
@@ -220,6 +220,8 @@ def render_sector_table(sector_name: str, stocks: List[SectorStock]) -> Table:
     t.add_column("GARP",      justify="center", width=10)
     t.add_column("Quant",     justify="right",  width=7)
     t.add_column("Signal",                      width=13)
+    t.add_column("BB%",       justify="right",  width=6)
+    t.add_column("Entry",                       width=11)
 
     garp_c = {"CHEAP":"bold green","FAIR":"green","EXPENSIVE":"yellow","VERY_EXPENSIVE":"red","N/A":"dim"}
 
@@ -270,6 +272,8 @@ def render_sector_table(sector_name: str, stocks: List[SectorStock]) -> Table:
             f"[{gc_color}]{garp}[/{gc_color}]",
             sc2(qs),
             f"[{sig_c}]{qr.signal_type if qr else '—'}[/{sig_c}]",
+            f"{qr.entry_quality.bb_position:.2f}" if qr and qr.entry_quality else "—",
+            entry_badge(qr) if qr else "—",
         )
     return t
 

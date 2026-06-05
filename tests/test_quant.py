@@ -105,6 +105,60 @@ class TestComputeHurst:
         result = _compute_hurst(flat_prices)
         assert 0 <= result.hurst <= 1
 
+    def test_random_walk_centred_near_half(self):
+        """The structure-function estimator must NOT be biased to ~1 (the old
+        R/S-on-price bug). A pure random walk should land near 0.5."""
+        np.random.seed(42)
+        rw = pd.Series(100 * np.exp(np.cumsum(np.random.normal(0, 0.01, 300))))
+        h = _compute_hurst(rw).hurst
+        assert 0.35 <= h <= 0.65, f"random walk H={h} — estimator is biased"
+
+
+# ── compute_entry_quality ─────────────────────────────────────────────────────
+
+from stocks.quant import compute_entry_quality
+
+
+class TestEntryQuality:
+    def _macd(self, hist, strength, bull=False):
+        return SimpleNamespace(macd_line=0.0, signal_line=0.0, histogram=hist,
+                               bullish_cross=bull, bearish_cross=False,
+                               zero_cross_up=False, trend_strength=strength, score=50.0)
+
+    def _hurst(self, interp):
+        return SimpleNamespace(hurst=0.6 if interp == "TRENDING" else 0.35,
+                               interpretation=interp, strategy_fit="", confidence="HIGH")
+
+    def _mr(self, bb):
+        return SimpleNamespace(zscore_20d=0.0, zscore_50d=0.0, bollinger_pct=bb,
+                               is_oversold=False, is_overbought=False, signal_strength=0.0)
+
+    def test_real_uptrend_is_buy_now(self):
+        eq = compute_entry_quality(self._macd(1.0, "BULL", bull=True),
+                                   self._hurst("TRENDING"), self._mr(0.5))
+        assert eq.rating == "BUY_NOW" and eq.score >= 58
+
+    def test_fake_momentum_is_avoid(self):
+        # MACD up but Hurst mean-reverting → momentum will snap back.
+        eq = compute_entry_quality(self._macd(1.0, "BULL"),
+                                   self._hurst("MEAN_REVERTING"), self._mr(0.5))
+        assert eq.rating == "AVOID" and eq.score < 42
+
+    def test_overbought_uptrend_waits_for_dip(self):
+        eq = compute_entry_quality(self._macd(1.0, "BULL"),
+                                   self._hurst("TRENDING"), self._mr(0.98))
+        assert eq.rating == "WAIT_PULLBACK"
+        assert eq.bb_flag == "OVERBOUGHT"
+
+    def test_score_and_rating_never_disagree(self):
+        # BUY_NOW must score higher than AVOID — the two must stay consistent.
+        buy = compute_entry_quality(self._macd(1.0, "BULL", bull=True),
+                                    self._hurst("TRENDING"), self._mr(0.4))
+        avoid = compute_entry_quality(self._macd(-1.0, "STRONG_BEAR"),
+                                      self._hurst("TRENDING"), self._mr(0.5))
+        assert buy.score > avoid.score
+        assert 0 <= buy.score <= 100 and 0 <= avoid.score <= 100
+
 
 # ── _compute_mean_reversion ───────────────────────────────────────────────────
 

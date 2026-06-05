@@ -107,6 +107,31 @@ class StatisticalScore:
 
 
 @dataclass
+class EntryQuality:
+    """
+    Entry-timing overlay — answers "should I buy TODAY or wait?".
+
+    This is deliberately NOT folded into overall_quant_score (which ranks
+    long-term value). It's a separate, descriptive timing layer that combines
+    three already-computed signals:
+      • MACD            — momentum DIRECTION (is the move up or down right now?)
+      • Hurst           — momentum PERSISTENCE (is the trend real or will it revert?)
+      • Bollinger %     — where price sits in its normal band (over-extended?)
+
+    The key insight is the pairing: MACD-up + Hurst-trending = a *real* trend
+    worth entering; MACD-up + Hurst-mean-reverting = *fake* momentum that will
+    snap back, so don't chase. Bollinger is a confirmation filter, never a
+    standalone signal — MACD-up but already through the upper band means "right
+    idea, wrong price → wait for the pullback / use a limit order".
+    """
+    rating: str          # BUY_NOW | WAIT_PULLBACK | WATCH_BOUNCE | AVOID | NEUTRAL
+    score: float         # 0-100 entry-timing quality (higher = better entry today)
+    bb_position: float   # bollinger_pct: 0 = lower band, 0.5 = mid, 1 = upper band
+    bb_flag: str         # OVERBOUGHT | OVERSOLD | NORMAL
+    note: str            # one-line "buy today vs wait" rationale
+
+
+@dataclass
 class FundamentalScore:
     """
     Multi-factor fundamental model (Value/Growth/Quality/Momentum).
@@ -152,6 +177,8 @@ class QuantReport:
     signal_type: str                # STRONG_BUY | BUY | HOLD | SELL | STRONG_SELL
     quant_thesis: str
     signal_conflicts: str = ""      # human-readable note when factors disagree
+    # Entry-timing overlay (defaults to None for back-compat construction in tests)
+    entry_quality: Optional["EntryQuality"] = None
     # ── Convenience shortcuts ──
     @property
     def momentum(self): return self.technical.macd  # backward compat
@@ -165,6 +192,8 @@ class QuantReport:
     def hurst(self): return self.statistical.hurst
     @property
     def factors(self): return self.fundamental
+    @property
+    def entry(self): return self.entry_quality
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -242,21 +271,30 @@ def _compute_kalman(closes: pd.Series) -> KalmanState:
 
 
 def _compute_hurst(closes: pd.Series) -> HurstResult:
-    prices = np.log(closes.tail(200).values.astype(float))
+    # Structure-function (generalised Hurst) estimator on LOG PRICE.
+    #
+    # The previous version ran R/S analysis on the log-PRICE level, which is
+    # biased to H≈1 for essentially every name: price is the cumulative sum of
+    # returns, so its rescaled range grows almost linearly with the lag no
+    # matter the underlying dynamics. That made the regime flag useless — it
+    # tagged every ticker "TRENDING" (observed: 0.92–1.00 across the board),
+    # which is exactly why the momentum signal lacked persistence validation.
+    #
+    # The structure function regresses log(std of lag-step log-price changes)
+    # on log(lag); the slope IS the Hurst exponent and is correctly centred at
+    # 0.5 for a random walk, <0.45 for mean-reverting, >0.55 for persistent.
+    prices = np.log(closes.tail(252).values.astype(float))
     n_total = len(prices)
     conf = "HIGH" if n_total >= 200 else ("MEDIUM" if n_total >= 100 else "LOW")
-    lags = [l for l in [10,20,40,80,100] if l < n_total//2]
-    if len(lags) < 3:
+    lags = [l for l in range(2, 40) if l < n_total // 2]
+    if len(lags) < 5:
         return HurstResult(0.5, "RANDOM", "insufficient data", "LOW")
-    rs_vals = []
-    for lag in lags:
-        rs_sub = []
-        for s in range(0, n_total-lag, lag):
-            sub = prices[s:s+lag]
-            dev = np.cumsum(sub - sub.mean())
-            rs_sub.append((dev.max()-dev.min()) / (sub.std()+1e-9))
-        rs_vals.append(np.mean(rs_sub))
-    H = float(np.clip(np.polyfit(np.log(lags), np.log(np.array(rs_vals)+1e-9), 1)[0], 0, 1))
+    tau = np.array([np.std(prices[lag:] - prices[:-lag]) for lag in lags])
+    mask = tau > 0
+    if mask.sum() < 5:
+        return HurstResult(0.5, "RANDOM", "insufficient data", "LOW")
+    H = float(np.clip(np.polyfit(np.log(np.array(lags)[mask]),
+                                 np.log(tau[mask]), 1)[0], 0, 1))
     H = round(H, 3)
     if   H < 0.45: interp, fit = "MEAN_REVERTING", "stat-arb / Z-score / pairs trading"
     elif H > 0.55: interp, fit = "TRENDING",        "momentum / trend following / breakout"
@@ -313,6 +351,68 @@ def _compute_statistical(closes: pd.Series) -> StatisticalScore:
 
     return StatisticalScore(markov=markov, kalman=kalman, hurst=hurst,
                             mean_reversion=mr, composite_score=composite, signal=sig)
+
+
+def compute_entry_quality(macd: "MACDSignal", hurst: HurstResult,
+                          mr: MeanReversionSignal) -> EntryQuality:
+    """
+    Combine momentum DIRECTION (MACD) + momentum PERSISTENCE (Hurst) +
+    over-extension (Bollinger) into a single "buy today vs wait" call.
+
+    Decision matrix (the actual product the user asked for):
+      MACD↑ + Hurst trending + not over-band   → BUY_NOW       (real, fresh trend)
+      MACD↑ + over upper band                  → WAIT_PULLBACK (right idea, wrong price)
+      MACD↑ + Hurst mean-reverting             → AVOID         (fake momentum, will snap back)
+      MACD↓ + Hurst mean-reverting + oversold  → WATCH_BOUNCE  (faded extreme, small probe)
+      MACD↓ + Hurst trending                   → AVOID         (real downtrend, don't catch)
+      otherwise                                → NEUTRAL       (no clean edge — wait)
+    """
+    bb = mr.bollinger_pct
+    if   bb > 0.95: bb_flag = "OVERBOUGHT"
+    elif bb < 0.05: bb_flag = "OVERSOLD"
+    else:           bb_flag = "NORMAL"
+
+    mom_up = bool(macd.histogram > 0 or macd.bullish_cross
+                  or macd.trend_strength in ("BULL", "STRONG_BULL"))
+    mom_dn = bool(macd.histogram < 0 and macd.trend_strength in ("BEAR", "STRONG_BEAR"))
+    trending = hurst.interpretation == "TRENDING"
+    meanrev  = hurst.interpretation == "MEAN_REVERTING"
+
+    # ── Discrete recommendation, then a score anchored to it so the two never
+    #    disagree (rating is the headline; score adds within-band granularity). ──
+    if mom_up and bb_flag == "OVERBOUGHT":
+        rating, base = "WAIT_PULLBACK", 50
+        note = f"momentum up but through upper band (BB={bb:.2f}) — limit-order a pullback toward the mid band"
+    elif mom_up and meanrev:
+        rating, base = "AVOID", 28
+        note = f"momentum is fake — Hurst={hurst.hurst:.2f} (mean-reverting), the move will snap back; don't chase"
+    elif mom_up and trending:
+        rating, base = "BUY_NOW", 78
+        note = f"real, persistent uptrend (Hurst={hurst.hurst:.2f}) and not over-extended (BB={bb:.2f}) — buyable today"
+    elif mom_up:
+        rating, base = "NEUTRAL", 50
+        note = f"momentum up but trend persistence unconfirmed (Hurst={hurst.hurst:.2f}) — wait for follow-through"
+    elif mom_dn and meanrev and bb_flag == "OVERSOLD":
+        rating, base = "WATCH_BOUNCE", 55
+        note = f"faded oversold extreme (BB={bb:.2f}, Hurst={hurst.hurst:.2f}) — only a small mean-reversion probe"
+    elif mom_dn:
+        rating, base = "AVOID", 22
+        note = f"real downtrend (Hurst={hurst.hurst:.2f}) — don't catch the falling knife"
+    else:
+        rating, base = "NEUTRAL", 48
+        note = "no clean directional edge — wait for a clearer entry"
+
+    # Within-band nudges (kept small so they can't flip the headline band).
+    score = float(base)
+    if rating == "BUY_NOW":
+        if macd.bullish_cross or macd.zero_cross_up: score += 8   # fresh cross = better entry
+        if bb < 0.6:                                 score += 6   # more room before the band
+    elif rating == "WAIT_PULLBACK":
+        score -= min(15, (bb - 0.95) * 100)                       # the more extended, the worse
+    score = round(float(np.clip(score, 0, 100)), 1)
+
+    return EntryQuality(rating=rating, score=score, bb_position=round(bb, 3),
+                        bb_flag=bb_flag, note=note)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -524,6 +624,9 @@ def build_quant_report(sd, closes: pd.Series, hist_df: pd.DataFrame = None) -> Q
     if fund.composite_score >= 7 and sig in ("SELL", "STRONG_SELL"):
         conflicts.append(f"strong fundamentals (F={fund.composite_score:.1f}) vs technical {sig}")
 
+    # ── Entry-timing overlay (separate from the long-term score) ──
+    entry = compute_entry_quality(tech.macd, stat.hurst, stat.mean_reversion)
+
     # ── Thesis ──
     parts = []
     mr = stat.mean_reversion
@@ -544,14 +647,32 @@ def build_quant_report(sd, closes: pd.Series, hist_df: pd.DataFrame = None) -> Q
     if not parts:                            parts.append("no strong directional signal")
 
     conflict_str = (" ⚠️ conflicts: " + "; ".join(conflicts)) if conflicts else ""
+    entry_str = f" ⏱ entry: {entry.rating} — {entry.note}"
 
     return QuantReport(
         ticker=sd.ticker, technical=tech, statistical=stat,
         ml_trend=ml, vol_regime=vol, risk=risk, fundamental=fund,
         overall_quant_score=overall, signal_type=sig,
-        quant_thesis=f"[{sig}] " + " | ".join(parts) + conflict_str,
+        quant_thesis=f"[{sig}] " + " | ".join(parts) + conflict_str + entry_str,
         signal_conflicts="; ".join(conflicts),
+        entry_quality=entry,
     )
+
+
+_ENTRY_BADGE = {
+    "BUY_NOW":       "🟢 BUY NOW",
+    "WAIT_PULLBACK": "🟡 WAIT DIP",
+    "WATCH_BOUNCE":  "🔵 PROBE",
+    "AVOID":         "🔴 AVOID",
+    "NEUTRAL":       "⚪ WAIT",
+}
+
+
+def entry_badge(qr: QuantReport) -> str:
+    """Short coloured Entry-Quality badge for screener / sector tables."""
+    if not qr.entry_quality:
+        return "—"
+    return _ENTRY_BADGE.get(qr.entry_quality.rating, qr.entry_quality.rating)
 
 
 def format_quant_one_liner(qr: QuantReport) -> str:
@@ -567,6 +688,8 @@ def format_quant_one_liner(qr: QuantReport) -> str:
         f"R:{r.risk_score:.0f}|"
         f"RSI:{t.stochastic.k_pct:.0f}|"
         f"H:{s.hurst.hurst:.2f}|"
+        f"BB:{s.mean_reversion.bollinger_pct:.2f}|"
         f"Kz:{s.kalman.kalman_zscore:+.1f}|"
+        f"Entry:{qr.entry_quality.rating if qr.entry_quality else 'N/A'}|"
         f"GARP:{qr.fundamental.garp_rating}"
     )
