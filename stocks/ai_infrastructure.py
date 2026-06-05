@@ -266,9 +266,10 @@ def build_ai_infra_context(picks: List[AIInfraPick], top_n: int = 12) -> str:
         lines.append(
             f"{s.ticker} ({s.name}) [{p.layer.split('—')[0].strip()}] {p.label}"
             f"{' ⭐NEXT-MICRON-SETUP' if p.is_next_micron else ''}: "
-            f"${s.current_price} | 6M {s.return_6m:+.0f}% | 1Y {s.return_1y:+.0f}% | "
+            f"price ${s.current_price} | analyst_target ${s.analyst_target if s.analyst_target else 'NONE'} "
+            f"({s.upside_to_target if s.upside_to_target is not None else 'N/A'}% upside) | "
+            f"6M {s.return_6m:+.0f}% | 1Y {s.return_1y:+.0f}% | "
             f"FwdPE {s.forward_pe or 'N/A'} | RevGr {s.revenue_growth or 'N/A'}% | "
-            f"Analyst upside {s.upside_to_target or 'N/A'}% | "
             f"GARP {s.quant.fundamental.garp_rating if s.quant else 'N/A'} | "
             f"Quant {s.quant.overall_quant_score:.0f}/100 | Opp {p.opportunity_score:.0f}/100"
         )

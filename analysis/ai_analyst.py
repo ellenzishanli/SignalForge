@@ -25,14 +25,28 @@ class StartupScore:
 SELLSIDE_PROMPT = """You are a senior equity research analyst at a bulge-bracket investment bank (Goldman Sachs, Morgan Stanley, or JPMorgan level). You are writing the daily cross-sector intelligence report distributed to institutional clients.
 
 Your report must match the quality, depth, and format of actual sell-side research. This means:
-- Every recommendation must have a price target with methodology
-- Every thesis must have 3+ specific, verifiable evidence points
+- Every recommendation references the analyst target FROM THE DATA (or notes none exists)
+- Every thesis must have 3+ specific, verifiable evidence points drawn from the data
 - Every risk must be rated HIGH/MEDIUM/LOW with specific mechanism
-- Every sector call must reference comparable company multiples
-- Bull/Base/Bear scenario analysis with specific price targets
+- Every sector call must reference the quant signals provided
 
 Market Data:
 {context}
+
+═══════════════════════════════════════════════════════════════════════
+DATA INTEGRITY — STRICT, NON-NEGOTIABLE
+═══════════════════════════════════════════════════════════════════════
+You may ONLY cite numbers that appear in the Market Data above. Every stock line
+gives you the exact "price $X" and "analyst_target $X". Use them verbatim.
+- CURRENT PRICE: quote the EXACT "price $X" from the data. Never round, never guess.
+  (If the data says price $532, you write $532 — not $50, not $500.)
+- PRICE TARGET: use ONLY the "analyst_target $X" from the data. If it says NONE,
+  write "no published target" — do NOT invent one or derive one from a made-up multiple.
+- Probabilities, growth %, PE, quant scores, P(bull): copy verbatim from the data.
+- Do NOT fabricate FY2026E revenue, DCF outputs, or "revenue multiple" targets that
+  are not in the data. If a number isn't provided, omit it — a missing number is
+  acceptable, a WRONG number makes the entire report worthless.
+Before writing any "$" figure, find it in the Market Data. If it isn't there, don't write it.
 
 ---
 
@@ -88,10 +102,9 @@ For each of the 3 most interesting sectors:
 3. [Competitive dynamic or regulatory change]
 
 **Top Pick: [TICKER] — [Company Name]**
-- **Rating:** [BUY / HOLD / SELL] | **Price Target:** $[X] | **Upside:** [X]%
-- **Methodology:** [Revenue multiple [X]x on FY2026E revenue of $[X]M = $[X] target]
-  OR [DCF: [X]% growth, [X]% terminal, [X]% WACC → $[X] intrinsic value]
-- **Key Metrics:** Revenue Growth [X]%, Margin [X]%, PE [X]x, GARP=[X], Quant=[X]/100
+- **Rating:** [BUY / HOLD / SELL] | **Current:** $[EXACT price from data] | **Analyst Target:** $[EXACT analyst_target from data, or "none published"] | **Upside:** [exact %]
+- **Why the target:** [Cite the analyst consensus target from the data and the quant signals supporting it. Do NOT invent revenue multiples, FY2026E figures, or DCF outputs — only reference numbers present in the data.]
+- **Key Metrics:** Revenue Growth [X]%, PE [X]x, GARP=[X], Quant=[X]/100 (all from the data)
 - **Quant Signal:** Hurst=[X] ([mean-reverting/trending]), Kalman Z=[X] ([below/above fair value]), Markov P(bull)=[X]%
 - **Investment Thesis:**
   [3-4 sentences. What is the specific edge? Why does the market misunderstand this stock? What's the non-consensus view?]
@@ -135,10 +148,9 @@ For each of the top 3 hidden gems in the data:
 - Key relationships/partnerships: [specific company names, contract values if available]
 
 **Valuation Framework:**
-- Current: $[X]B market cap
-- Bull case market opportunity: $[X]B TAM
-- If captures [X]% share at [X]x revenue multiple → $[X] price target
-- Comparable: [comp company at similar stage, what multiple it traded at]
+- Current: $[exact market cap from data]B | analyst_target $[exact from data, or "none published"]
+- Qualitative TAM/opportunity discussion is fine, but do NOT state a numeric "$X price
+  target" unless it is the analyst_target in the data. No invented multiples or share-capture math.
 
 **Catalyst Map (next 12 months):**
 1. [Q-date or event]: [specific catalyst — FDA approval, contract award, revenue milestone]
@@ -175,7 +187,8 @@ For the top 5 ETFs from the data:
 ## PART V — PRIORITY RANKINGS
 
 ### ⭐⭐⭐ STRONG BUY — Highest Conviction
-[TICKER] | $[X] → $[X] target (+X%) | [One sentence with one specific quant number]
+[TICKER] | $[EXACT current price from data] → $[EXACT analyst_target from data] ([exact upside]%) | [One sentence citing one specific quant number from the data]
+(If a name has analyst_target NONE, write "no published target" instead of a price.)
 
 ### ⭐⭐ BUY — Build Position
 [TICKER] | [One sentence rationale with quant signal]
@@ -274,6 +287,10 @@ upside, and penalizes already-extended momentum names.
 {context}
 
 Today: {TODAY}.
+
+DATA INTEGRITY: Only cite numbers that appear above. Quote "price $X" and
+"analyst_target $X" verbatim — never round or invent a price/target. If a name's
+analyst_target is NONE, say "no published target". A wrong number is worse than none.
 
 Write a concise briefing in this exact structure:
 

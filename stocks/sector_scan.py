@@ -353,15 +353,17 @@ def build_sector_context_for_ai(
         for s in stocks:
             qr = s.quant
             lines.append(
-                f"{s.ticker} ({s.name[:20]}): ${s.current_price} | "
+                f"{s.ticker} ({s.name[:20]}): price ${s.current_price} | "
+                f"analyst_target ${s.analyst_target if s.analyst_target else 'NONE'} "
+                f"({s.upside_to_target if s.upside_to_target is not None else 'N/A'}% upside) | "
                 f"1Y {s.return_1y:+.1f}% | PE {s.pe_ratio or 'N/A'}x | "
                 f"RevGr {s.revenue_growth or 'N/A'}% | "
-                f"Upside {s.upside_to_target or 'N/A'}% | "
                 f"Quant {qr.overall_quant_score:.0f}/100 | "
                 f"GARP {qr.fundamental.garp_rating} | "
+                f"P(bull next day) {qr.statistical.markov.prob_bull_tomorrow:.0%} | "
                 f"Hurst {qr.statistical.hurst.hurst:.2f}({qr.statistical.hurst.interpretation}) | "
                 f"Signal {qr.signal_type}"
-                if qr else f"{s.ticker}: ${s.current_price} | 1Y {s.return_1y:+.1f}%"
+                if qr else f"{s.ticker}: price ${s.current_price} | 1Y {s.return_1y:+.1f}%"
             )
 
     lines.append("\n=== ETF LANDSCAPE (top 20 by quant score) ===")
