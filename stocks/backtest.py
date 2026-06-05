@@ -212,6 +212,7 @@ def run_backtest_and_display(console=None):
             # Normalize timezone-aware index
             if df.index.tz is not None:
                 df.index = df.index.tz_localize(None)
+            df = df[df["Close"].notna()]   # drop un-settled trailing NaN bar
             price_cache[ticker] = df[["Open", "High", "Low", "Close", "Volume"]].copy()
         except Exception as e:
             failed.append(ticker)
@@ -221,7 +222,7 @@ def run_backtest_and_display(console=None):
         spy_df = yf.Ticker("SPY").history(period="18mo")
         if spy_df.index.tz is not None:
             spy_df.index = spy_df.index.tz_localize(None)
-        spy_closes = spy_df["Close"]
+        spy_closes = spy_df["Close"].dropna()
     except Exception:
         spy_closes = None
 

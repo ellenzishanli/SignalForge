@@ -117,6 +117,7 @@ def fetch_hidden_gem(ticker: str) -> Optional[HiddenGem]:
 
         t    = yf.Ticker(ticker)
         hist = t.history(period="14mo")
+        hist = hist[hist["Close"].notna()]   # drop un-settled trailing NaN bar
         if hist.empty or len(hist) < 30:
             return None
 

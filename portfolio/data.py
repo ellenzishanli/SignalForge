@@ -20,9 +20,9 @@ MARKET_TICKER = "SPY"
 def _fetch_closes(ticker: str, period: str) -> Optional[Tuple[str, pd.Series]]:
     try:
         hist = yf.Ticker(ticker).history(period=period)
-        if hist.empty or len(hist) < 120:
+        closes = hist["Close"].dropna().copy()   # drop un-settled trailing NaN bar
+        if closes.empty or len(closes) < 120:
             return None
-        closes = hist["Close"].copy()
         closes.index = closes.index.tz_localize(None)  # normalize for clean alignment
         return (ticker, closes)
     except Exception:

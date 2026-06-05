@@ -428,7 +428,7 @@ def _get_spy_1y() -> float:
     if _SPY_RETURN_1Y is not None: return _SPY_RETURN_1Y
     try:
         import yfinance as yf
-        c = yf.Ticker("SPY").history(period="13mo")["Close"]
+        c = yf.Ticker("SPY").history(period="13mo")["Close"].dropna()
         _SPY_RETURN_1Y = round((float(c.iloc[-1])/float(c.iloc[-253])-1)*100, 2)
         return _SPY_RETURN_1Y
     except Exception:

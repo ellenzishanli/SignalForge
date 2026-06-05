@@ -75,6 +75,7 @@ def _get_quant_for_ticker(ticker: str) -> Dict:
 
         t    = yf.Ticker(ticker)
         hist = t.history(period="6mo")
+        hist = hist[hist["Close"].notna()]   # drop un-settled trailing NaN bar
         if hist.empty or len(hist) < 30:
             return default
         closes = hist["Close"]

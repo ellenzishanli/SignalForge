@@ -58,6 +58,9 @@ def fetch_sector_stock(ticker: str, sector_label: str) -> Optional[SectorStock]:
     try:
         t    = yf.Ticker(ticker)
         hist = t.history(period="14mo")
+        # Drop bars with no settled close (yfinance often returns today's
+        # un-settled bar as a trailing NaN, which would make price/returns NaN).
+        hist = hist[hist["Close"].notna()]
         if hist.empty or len(hist) < 60:
             return None
 

@@ -86,6 +86,9 @@ def fetch_stock_data(ticker: str, is_etf: bool = False) -> Optional[StockData]:
     try:
         stock = yf.Ticker(ticker)
         hist  = stock.history(period="14mo")
+        # Drop un-settled trailing NaN bars (yfinance returns today's partial bar
+        # as a NaN close, which would propagate NaN into price/returns/upside).
+        hist  = hist[hist["Close"].notna()]
         if hist.empty or len(hist) < 60:
             return None
 
